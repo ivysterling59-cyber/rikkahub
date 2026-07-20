@@ -10,7 +10,7 @@ import org.koin.android.ext.android.inject
 
 /**
  * 透明 Activity，用于接收 MCP OAuth 授权完成后的 deep link 回调
- * (rikkahub://mcp-oauth-callback?code=...&state=...)，解析后经 [AppEventBus] 转发。
+ * (rikkahub-mod://mcp-oauth-callback?code=...&state=...)，解析后经 [AppEventBus] 转发。
  */
 class McpOAuthCallbackActivity : ComponentActivity() {
     private val eventBus by inject<AppEventBus>()

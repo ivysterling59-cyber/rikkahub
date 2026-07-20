@@ -1,0 +1,74 @@
+name: Build Mod APK
+
+on:
+  push:
+    branches:
+      - codex/mod-apk-package
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+
+      - name: Install web UI dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build universal debug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          cp app/build/outputs/apk/debug/app-universal-debug.apk RikkaHub-Mod-2.4.2.apk
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RikkaHub-Mod-2.4.2
+          path: RikkaHub-Mod-2.4.2.apk
+          if-no-files-found: error
+
+      - name: Publish GitHub prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mod-v2.4.2-1
+          name: RikkaHub Mod 2.4.2-1
+          prerelease: true
+          generate_release_notes: false
+          body: |
+            Modified build that can be installed alongside the official RikkaHub app.
+
+            - Package: `com.ivysterling59cyber.rikkahub`
+            - App name: `RikkaHub Mod`
+            - Removes the oversized-conversation warning dialog
+            - Firebase analytics and crash reporting are disabled
+          files: RikkaHub-Mod-2.4.2.apk
