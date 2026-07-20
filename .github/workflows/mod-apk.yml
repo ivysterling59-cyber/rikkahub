@@ -44,31 +44,55 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build universal debug APK
+      - name: Prepare release signing
+        run: |
+          printf '%s' '${{ secrets.MOD_KEYSTORE_BASE64 }}' | base64 --decode > app/mod-release.jks
+          cat > local.properties <<EOF
+          storeFile=mod-release.jks
+          storePassword=${{ secrets.MOD_KEYSTORE_PASSWORD }}
+          keyAlias=rikkahub-mod
+          keyPassword=${{ secrets.MOD_KEY_PASSWORD }}
+          EOF
+
+      - name: Build universal release APK
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
-          cp app/build/outputs/apk/debug/app-universal-debug.apk RikkaHub-Mod-2.4.2.apk
+          ./gradlew assembleRelease
+          cp app/build/outputs/apk/release/app-universal-release.apk RikkaHub-Mod-2.4.2-release.apk
+
+      - name: Verify release APK
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose --print-certs RikkaHub-Mod-2.4.2-release.apk
+          "$AAPT" dump badging RikkaHub-Mod-2.4.2-release.apk | grep "package: name='com.ivysterling59cyber.rikkahub'"
+          sha256sum RikkaHub-Mod-2.4.2-release.apk > RikkaHub-Mod-2.4.2-release.apk.sha256
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RikkaHub-Mod-2.4.2
-          path: RikkaHub-Mod-2.4.2.apk
+          name: RikkaHub-Mod-2.4.2-release
+          path: |
+            RikkaHub-Mod-2.4.2-release.apk
+            RikkaHub-Mod-2.4.2-release.apk.sha256
           if-no-files-found: error
 
-      - name: Publish GitHub prerelease
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: mod-v2.4.2-1
-          name: RikkaHub Mod 2.4.2-1
-          prerelease: true
+          tag_name: mod-v2.4.2-2
+          target_commitish: ${{ github.sha }}
+          name: RikkaHub Mod 2.4.2-2
+          prerelease: false
           generate_release_notes: false
           body: |
-            Modified build that can be installed alongside the official RikkaHub app.
+            Signed release build that can be installed alongside the official RikkaHub app.
 
             - Package: `com.ivysterling59cyber.rikkahub`
             - App name: `RikkaHub Mod`
+            - Build type: signed release
             - Removes the oversized-conversation warning dialog
             - Firebase analytics and crash reporting are disabled
-          files: RikkaHub-Mod-2.4.2.apk
+          files: |
+            RikkaHub-Mod-2.4.2-release.apk
+            RikkaHub-Mod-2.4.2-release.apk.sha256
