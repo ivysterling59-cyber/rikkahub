@@ -332,6 +332,11 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val QWEN_3_8_MAX = defineModel {
+        tokens("qwen", "3", "8", "max")
+        toolReasoningAbility()
+    }
+
     private val DOUBAO_1_6 = defineModel {
         tokens("doubao", "1", "6")
         visionInput()
@@ -367,26 +372,26 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
-    private val KIMI_K2_5 = defineModel {
+    val KIMI_K2_5 = defineModel {
         tokens("kimi", "k", "2", "5")
         visionInput()
         toolReasoningAbility()
     }
 
-    private val KIMI_K2_6 = defineModel {
+    val KIMI_K2_6 = defineModel {
         tokens("kimi", "k", "2", "6")
         visionInput()
         toolReasoningAbility()
     }
 
-    private val KIMI_K3 = defineModel {
+    val KIMI_K3 = defineModel {
         tokens("kimi", "k", "3")
         visionInput()
         toolReasoningAbility()
     }
 
     // 兼容不带 kimi 前缀的裸 id "k3"
-    private val KIMI_K3_ALIAS = defineModel {
+    val KIMI_K3_ALIAS = defineModel {
         exact("k3")
         visionInput()
         toolReasoningAbility()
@@ -482,6 +487,18 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val XIAOMI_MIMO_V3 = defineModel {
+        tokens("mimo", "v", "3")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    private val XIAOMI_MIMO_V3_PRO = defineModel {
+        tokens("mimo", "v", "3", "pro")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     private val HY3 = defineModel {
         tokens("hy", "3")
         toolReasoningAbility()
@@ -547,6 +564,7 @@ object ModelRegistry {
         QWEN_3_5_MAX,
         QWEN_3_6_MAX,
         QWEN_3_7_MAX,
+        QWEN_3_8_MAX,
         DOUBAO_1_6,
         DOUBAO_1_8,
         DOUBAO_2_0,
@@ -574,6 +592,8 @@ object ModelRegistry {
         XIAOMI_MIMO_V2_PRO,
         XIAOMI_MIMO_V2_5,
         XIAOMI_MIMO_V2_5_PRO,
+        XIAOMI_MIMO_V3,
+        XIAOMI_MIMO_V3_PRO,
         HY3,
         LONGCAT_2,
         QWEN_MT
