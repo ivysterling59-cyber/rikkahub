@@ -80,9 +80,9 @@ jobs:
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: mod-v2.4.5-1
+          tag_name: mod-v2.4.5-2
           target_commitish: ${{ github.sha }}
-          name: RikkaHub Mod 2.4.5-1
+          name: RikkaHub Mod 2.4.5-2
           prerelease: false
           generate_release_notes: false
           body: |
