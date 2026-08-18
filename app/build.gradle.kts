@@ -20,8 +20,8 @@ android {
         applicationId = "com.ivysterling59cyber.rikkahub"
         minSdk = 26
         targetSdk = 37
-        versionCode = 172
-        versionName = "2.4.5"
+        versionCode = 177
+        versionName = "2.4.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -173,7 +173,7 @@ dependencies {
     // Haze (background blur)
     implementation(libs.haze)
     implementation(libs.haze.blur)
-    implementation(libs.haze.blur.materials)
+    implementation(libs.haze.blur.material3)
 
     // koin
     implementation(platform(libs.koin.bom))
