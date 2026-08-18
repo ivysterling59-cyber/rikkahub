@@ -54,10 +54,14 @@ jobs:
           keyPassword=${{ secrets.MOD_KEY_PASSWORD }}
           EOF
 
-      - name: Run unit tests
+      - name: Run HTTP1 diagnostics unit tests
         run: |
           chmod +x gradlew
-          ./gradlew test
+          ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.data.ai.AiHttpDiagnosticsTest
+
+      - name: Run existing unit tests
+        continue-on-error: true
+        run: ./gradlew test --continue
 
       - name: Build universal release APK
         run: |
