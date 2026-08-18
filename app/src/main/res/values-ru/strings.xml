@@ -594,7 +594,7 @@
   <string name="send">Отправить</string>
   <string name="setting_asr_configure_api_key">Ключ API</string>
   <string name="setting_asr_configure_dashscope_api_key_desc">Ключ API DashScope</string>
-  <string name="setting_asr_configure_dashscope_vad_desc">Чувствительность VAD на сервере, установите 0 для отключения VAD</string>
+  <string name="setting_asr_configure_dashscope_vad_desc">Серверный порог обнаружения VAD. Рекомендуемое значение: 0.0; диапазон: от -1 до 1.</string>
   <string name="setting_asr_configure_dashscope_websocket_desc">Конечная точка веб-сокета DashScope в реальном времени</string>
   <string name="setting_asr_configure_language">Язык</string>
   <string name="setting_asr_configure_language_code_desc">Необязательный код языка, например zh-CN, en-US, ja-JP</string>
@@ -1280,5 +1280,18 @@
   <string name="assistant_page_context_message_limit_count">Лимит сообщений контекста: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">Неограниченные сообщения контекста</string>
   <string name="assistant_page_context_message_limit_warning">Ограничение контекста аннулирует кэш промпта каждый раз, когда контекст усекается. Больший лимит усекает реже; безлимитный не усекает никогда и сохраняет кэш полностью нетронутым.</string>
+  <string name="search_picker_local_title">Локальный поиск</string>
+  <string name="search_picker_local_description">Подключение к различным сторонним поисковым провайдерам</string>
+  <string name="search_picker_model_title">Поиск через модель</string>
+  <string name="search_picker_model_description">Облачный поиск, встроенный в провайдера моделей</string>
+  <string name="search_picker_select_provider">Выберите провайдера поиска</string>
+  <string name="search_picker_turn_off">Отключить поиск</string>
+  <string name="setting_update_reminder_enabled">Напоминания об обновлениях включены</string>
+  <string name="setting_update_reminder_paused_until">Приостановлено до %1$s</string>
+  <string name="setting_update_reminder_pause_title">Приостановить напоминания об обновлениях</string>
+  <string name="setting_update_reminder_pause_description">Выберите, как долго приостановить напоминания об обновлениях. Они возобновятся автоматически.</string>
+  <string name="setting_update_reminder_pause_days">%1$d дн.</string>
+  <string name="setting_update_reminder_resume_now">Возобновить сейчас</string>
+  <string name="reasoning_max">Максимум</string>
 </resources>
 
