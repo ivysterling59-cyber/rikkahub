@@ -1,9 +1,9 @@
-name: Build Mod APK
+name: Build HTTP1 Test APK
 
 on:
   push:
     branches:
-      - codex/mod-apk-package
+      - codex/http1-ai-test
   workflow_dispatch:
 
 permissions:
@@ -54,45 +54,30 @@ jobs:
           keyPassword=${{ secrets.MOD_KEY_PASSWORD }}
           EOF
 
-      - name: Build universal release APK
+      - name: Run unit tests
         run: |
           chmod +x gradlew
+          ./gradlew test
+
+      - name: Build universal release APK
+        run: |
           ./gradlew assembleRelease
-          cp app/build/outputs/apk/release/app-universal-release.apk RikkaHub-Mod-2.4.10-release.apk
+          cp app/build/outputs/apk/release/app-universal-release.apk RikkaHub-http1-test.apk
 
       - name: Verify release APK
         run: |
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
           AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)
-          "$APKSIGNER" verify --verbose --print-certs RikkaHub-Mod-2.4.10-release.apk
-          "$AAPT" dump badging RikkaHub-Mod-2.4.10-release.apk | grep "package: name='com.ivysterling59cyber.rikkahub'"
-          sha256sum RikkaHub-Mod-2.4.10-release.apk > RikkaHub-Mod-2.4.10-release.apk.sha256
+          "$APKSIGNER" verify --verbose --print-certs RikkaHub-http1-test.apk
+          "$AAPT" dump badging RikkaHub-http1-test.apk | grep "package: name='com.ivysterling59cyber.rikkahub'"
+          "$AAPT" dump badging RikkaHub-http1-test.apk | grep "versionName='2.4.10-http1-test'"
+          sha256sum RikkaHub-http1-test.apk > RikkaHub-http1-test.apk.sha256
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RikkaHub-Mod-2.4.10-release
+          name: RikkaHub-http1-test
           path: |
-            RikkaHub-Mod-2.4.10-release.apk
-            RikkaHub-Mod-2.4.10-release.apk.sha256
+            RikkaHub-http1-test.apk
+            RikkaHub-http1-test.apk.sha256
           if-no-files-found: error
-
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: mod-v2.4.10-1
-          target_commitish: ${{ github.sha }}
-          name: RikkaHub Mod 2.4.10-1
-          prerelease: false
-          generate_release_notes: false
-          body: |
-            Signed release build that can be installed alongside the official RikkaHub app.
-
-            - Package: `com.ivysterling59cyber.rikkahub`
-            - App name: `RikkaHub Mod`
-            - Build type: signed release
-            - Removes the oversized-conversation warning dialog
-            - Firebase analytics and crash reporting are disabled
-          files: |
-            RikkaHub-Mod-2.4.10-release.apk
-            RikkaHub-Mod-2.4.10-release.apk.sha256

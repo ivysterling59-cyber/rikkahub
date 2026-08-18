@@ -51,6 +51,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.metadataAs
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.AiStreamCancellationDiagnostics
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
@@ -232,8 +233,10 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 .build()
         )
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
-
+        val cancellationDiagnostics = AiStreamCancellationDiagnostics(
+            provider = "google",
+            flowJob = coroutineContext[kotlinx.coroutines.Job],
+        )
         val responseId = Uuid.random().toString()
         val decoder = GoogleStreamDecoder(responseId, params.model.modelId)
 
@@ -252,14 +255,16 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 type: String?,
                 data: String
             ) {
-                Log.i(TAG, "onEvent: $data")
-
                 try {
                     val result = decoder.accept(SseEvent(id = id, event = type, data = data))
                     sendChunks(result.chunks)
-                    if (result.completed) close()
+                    if (result.completed) {
+                        cancellationDiagnostics.mark("provider_completed")
+                        close()
+                    }
                 } catch (e: Throwable) {
-                    Log.e(TAG, "Failed to parse stream event: $data", e)
+                    cancellationDiagnostics.mark("decode_failure")
+                    Log.e(TAG, "Failed to parse stream event (${e.javaClass.name})", e)
                     close(e)
                 }
             }
@@ -272,14 +277,11 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 var exception = t
 
                 t?.printStackTrace()
-                println("[onFailure] 发生错误: ${t?.message}")
-
                 try {
                     if (t == null && response != null) {
                         val bodyStr = response.body.stringSafe()
                         if (!bodyStr.isNullOrEmpty()) {
                             val bodyElement = json.parseToJsonElement(bodyStr)
-                            println(bodyElement)
                             if (bodyElement is JsonObject) {
                                 exception = Exception(
                                     bodyElement["error"]?.jsonObject?.get("message")?.jsonPrimitive?.content
@@ -294,12 +296,13 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     e.printStackTrace()
                     exception = e
                 } finally {
+                    cancellationDiagnostics.mark("network_failure")
                     close(exception ?: Exception("Stream failed"))
                 }
             }
 
             override fun onClosed(eventSource: EventSource) {
-                println("[onClosed] 连接已关闭")
+                cancellationDiagnostics.mark("transport_closed")
                 sendChunks(decoder.onClosed())
                 close()
             }
@@ -309,7 +312,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 .newEventSource(request, listener)
 
         awaitClose {
-            println("[awaitClose] 关闭eventSource")
+            cancellationDiagnostics.logCleanup()
             eventSource.cancel()
         }
         // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界

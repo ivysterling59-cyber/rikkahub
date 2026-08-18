@@ -4,7 +4,6 @@ import me.rerere.common.android.LogEntry
 import me.rerere.common.android.Logging
 import okhttp3.Interceptor
 import okhttp3.Response
-import okio.Buffer
 
 class RequestLoggingInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -15,12 +14,10 @@ class RequestLoggingInterceptor : Interceptor {
         val request = chain.request()
         val startTime = System.currentTimeMillis()
 
-        val requestHeaders = request.headers.toMap()
-        val requestBody = request.body?.let { body ->
-            val buffer = Buffer()
-            body.writeTo(buffer)
-            buffer.readUtf8()
-        }
+        val requestHeaders = request.headers.toSafeMap()
+        // Request bodies can contain prompts and complete conversation history.
+        val requestBody: String? = null
+        val safeUrl = request.url.newBuilder().query(null).fragment(null).build().toString()
 
         val response: Response
         var error: String? = null
@@ -32,7 +29,7 @@ class RequestLoggingInterceptor : Interceptor {
             Logging.logRequest(
                 LogEntry.RequestLog(
                     tag = "HTTP",
-                    url = request.url.toString(),
+                    url = safeUrl,
                     method = request.method,
                     requestHeaders = requestHeaders,
                     requestBody = requestBody,
@@ -43,12 +40,12 @@ class RequestLoggingInterceptor : Interceptor {
         }
 
         val durationMs = System.currentTimeMillis() - startTime
-        val responseHeaders = response.headers.toMap()
+        val responseHeaders = response.headers.toSafeMap()
 
         Logging.logRequest(
             LogEntry.RequestLog(
                 tag = "HTTP",
-                url = request.url.toString(),
+                url = safeUrl,
                 method = request.method,
                 requestHeaders = requestHeaders,
                 requestBody = requestBody,
@@ -62,7 +59,18 @@ class RequestLoggingInterceptor : Interceptor {
         return response
     }
 
-    private fun okhttp3.Headers.toMap(): Map<String, String> {
-        return names().associateWith { get(it) ?: "" }
+    private fun okhttp3.Headers.toSafeMap(): Map<String, String> {
+        return names().associateWith { name ->
+            if (name.lowercase() in SENSITIVE_HEADERS) "██" else get(name).orEmpty()
+        }
+    }
+
+    private companion object {
+        val SENSITIVE_HEADERS = setOf(
+            "authorization",
+            "proxy-authorization",
+            "x-api-key",
+            "x-goog-api-key",
+        )
     }
 }
