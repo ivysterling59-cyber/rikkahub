@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.data.ai
 
 import okhttp3.OkHttpClient
-import okhttp3.Protocol
 import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -10,12 +9,14 @@ import org.junit.Test
 
 class AiHttpDiagnosticsTest {
     @Test
-    fun `AI compatibility client only advertises HTTP 1_1`() {
+    fun `diagnostic client preserves normal protocol configuration`() {
         val parent = OkHttpClient()
 
-        val client = parent.newHttp1AiClient()
+        val client = parent.newDiagnosedAiClient(logConfiguration = false)
 
-        assertEquals(listOf(Protocol.HTTP_1_1), client.protocols)
+        assertEquals(parent.protocols, client.protocols)
+        assertEquals(parent.callTimeoutMillis, client.callTimeoutMillis)
+        assertEquals(parent.readTimeoutMillis, client.readTimeoutMillis)
         assertEquals(parent.dispatcher, client.dispatcher)
         assertEquals(parent.connectionPool, client.connectionPool)
     }

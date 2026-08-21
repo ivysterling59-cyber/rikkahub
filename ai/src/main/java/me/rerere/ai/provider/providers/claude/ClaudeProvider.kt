@@ -66,7 +66,9 @@ import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
+import me.rerere.common.http.aiRequestTrace
 import me.rerere.common.http.jsonPrimitiveOrNull
+import me.rerere.common.http.withAiRequestTrace
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -303,6 +305,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             .addHeader("x-api-key", keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString()))
             .addHeader("anthropic-version", ANTHROPIC_VERSION)
             .configureReferHeaders(providerSetting.baseUrl)
+            .withAiRequestTrace(provider = "claude", streaming = false)
             .build()
 
         val response = client.newCall(request).await()
@@ -351,10 +354,11 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             .addHeader("anthropic-version", ANTHROPIC_VERSION)
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
+            .withAiRequestTrace(provider = "claude", streaming = true)
             .build()
 
         val cancellationDiagnostics = AiStreamCancellationDiagnostics(
-            provider = "claude",
+            trace = requireNotNull(request.aiRequestTrace()),
             flowJob = coroutineContext[kotlinx.coroutines.Job],
         )
         val decoder = ClaudeStreamDecoder()
@@ -374,6 +378,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                 type: String?,
                 data: String
             ) {
+                cancellationDiagnostics.onEvent()
                 try {
                     val result = decoder.accept(SseEvent(id = id, event = type, data = data))
                     sendChunks(result.chunks)
@@ -382,7 +387,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                         close()
                     }
                 } catch (e: Throwable) {
-                    cancellationDiagnostics.mark("decode_failure")
+                    cancellationDiagnostics.mark("decode_failure", e)
                     close(e)
                 }
             }
@@ -403,7 +408,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                     Log.w(TAG, "onFailure: failed to parse provider error body (${e.javaClass.name})")
                     e.printStackTrace()
                 } finally {
-                    cancellationDiagnostics.mark("network_failure")
+                    cancellationDiagnostics.mark("network_failure", exception)
                     close(exception)
                 }
             }

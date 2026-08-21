@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.service
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -70,10 +71,26 @@ class ConversationSession(
     }
 
     fun setJob(job: Job?) {
-        _generationJob.value?.cancel()
+        val previous = _generationJob.value
+        if (previous != null && previous !== job && previous.isActive) {
+            Log.w(
+                "AiHttpDiag",
+                "event=GENERATION_JOB_CANCEL source=ConversationSession.setJob " +
+                    "conversationId=$id reason=session_job_replaced jobActive=${previous.isActive} " +
+                    "jobCancelled=${previous.isCancelled}",
+                Throwable("Generation job replacement stack"),
+            )
+            previous.cancel(CancellationException("session_job_replaced"))
+        }
         _generationJob.value = job
-        job?.invokeOnCompletion {
-            _generationJob.value = null
+        job?.invokeOnCompletion { cause ->
+            val clearedCurrentJob = _generationJob.compareAndSet(job, null)
+            Log.i(
+                "AiHttpDiag",
+                "event=GENERATION_JOB_COMPLETED conversationId=$id " +
+                    "cause=${cause?.javaClass?.name ?: "none"} message=${cause?.message ?: "none"} " +
+                    "jobCancelled=${job.isCancelled} clearedCurrentJob=$clearedCurrentJob",
+            )
             if (refCount.get() <= 0) {
                 scheduleIdleCheck()
             }
@@ -98,7 +115,18 @@ class ConversationSession(
     }
 
     fun cleanup() {
-        _generationJob.value?.cancel()
+        _generationJob.value?.let { job ->
+            if (job.isActive) {
+                Log.w(
+                    "AiHttpDiag",
+                    "event=GENERATION_JOB_CANCEL source=ConversationSession.cleanup " +
+                        "conversationId=$id reason=session_cleanup jobActive=${job.isActive} " +
+                        "jobCancelled=${job.isCancelled}",
+                    Throwable("Conversation session cleanup stack"),
+                )
+                job.cancel(CancellationException("session_cleanup"))
+            }
+        }
         _generationJob.value = null
         idleCheckJob?.cancel()
         idleCheckJob = null

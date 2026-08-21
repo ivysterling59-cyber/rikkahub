@@ -56,9 +56,11 @@ import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
+import me.rerere.common.http.aiRequestTrace
 import me.rerere.common.http.jsonArrayOrNull
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.common.http.jsonPrimitiveOrNull
+import me.rerere.common.http.withAiRequestTrace
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -94,6 +96,7 @@ class ChatCompletionsAPI(
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
             .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
             .configureReferHeaders(providerSetting.baseUrl)
+            .withAiRequestTrace(provider = "openai-compatible", streaming = false)
             .build()
 
         val response = client.newCall(request).await()
@@ -144,10 +147,11 @@ class ChatCompletionsAPI(
             .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
+            .withAiRequestTrace(provider = "openai-compatible", streaming = true)
             .build()
 
         val cancellationDiagnostics = AiStreamCancellationDiagnostics(
-            provider = "openai-compatible",
+            trace = requireNotNull(request.aiRequestTrace()),
             flowJob = coroutineContext[kotlinx.coroutines.Job],
         )
         val decoder = ChatCompletionsStreamDecoder()
@@ -167,6 +171,7 @@ class ChatCompletionsAPI(
                 type: String?,
                 data: String
             ) {
+                cancellationDiagnostics.onEvent()
                 try {
                     val result = decoder.accept(SseEvent(id = id, event = type, data = data))
                     sendChunks(result.chunks)
@@ -175,7 +180,7 @@ class ChatCompletionsAPI(
                         close()
                     }
                 } catch (e: Throwable) {
-                    cancellationDiagnostics.mark("decode_failure")
+                    cancellationDiagnostics.mark("decode_failure", e)
                     close(e)
                 }
             }
@@ -196,7 +201,7 @@ class ChatCompletionsAPI(
                     e.printStackTrace()
                     exception = e
                 } finally {
-                    cancellationDiagnostics.mark("network_failure")
+                    cancellationDiagnostics.mark("network_failure", exception)
                     close(exception)
                 }
             }

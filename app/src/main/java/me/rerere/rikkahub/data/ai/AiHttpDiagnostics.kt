@@ -1,6 +1,9 @@
 package me.rerere.rikkahub.data.ai
 
 import android.util.Log
+import me.rerere.common.http.aiRequestTrace
+import me.rerere.common.http.rootCauseForAiDiagnostics
+import me.rerere.common.http.safeForAiDiagnostics
 import okhttp3.Call
 import okhttp3.Connection
 import okhttp3.EventListener
@@ -13,14 +16,23 @@ import java.util.concurrent.atomic.AtomicLong
 
 private const val TAG = "AiHttpDiag"
 
-/**
- * Creates the single AI-only client used by the HTTP/1.1 compatibility experiment.
- * The parent client's dispatcher, connection pool, timeouts and interceptors are retained.
- */
-internal fun OkHttpClient.newHttp1AiClient(): OkHttpClient = newBuilder()
-    .protocols(listOf(Protocol.HTTP_1_1))
-    .eventListenerFactory { AiHttpEventListener() }
-    .build()
+/** Adds request diagnostics to the AI client without changing protocols or timeouts. */
+internal fun OkHttpClient.newDiagnosedAiClient(logConfiguration: Boolean = true): OkHttpClient {
+    if (logConfiguration) {
+        Log.i(
+            TAG,
+            "event=AI_CLIENT_CONFIG connectTimeoutMs=$connectTimeoutMillis " +
+                "readTimeoutMs=$readTimeoutMillis writeTimeoutMs=$writeTimeoutMillis " +
+                "callTimeoutMs=$callTimeoutMillis pingIntervalMs=$pingIntervalMillis " +
+                "protocols=${protocols.joinToString { it.name }} " +
+                "retryOnConnectionFailure=$retryOnConnectionFailure " +
+                "maxRequests=${dispatcher.maxRequests} maxRequestsPerHost=${dispatcher.maxRequestsPerHost}",
+        )
+    }
+    return newBuilder()
+        .eventListenerFactory { AiHttpEventListener() }
+        .build()
+}
 
 internal data class AiRequestDescription(
     val provider: String,
@@ -57,83 +69,93 @@ internal fun Request.describeAiRequest(): AiRequestDescription {
 }
 
 private class AiHttpEventListener : EventListener() {
-    private val requestId = nextRequestId.incrementAndGet()
-    private val startedAtMs = System.currentTimeMillis()
+    private val fallbackRequestId = "http-${fallbackSequence.incrementAndGet()}"
     private val startedAtNanos = System.nanoTime()
     private var protocol: Protocol? = null
     private var statusCode: Int? = null
     private var normalEof = false
 
-    override fun callStart(call: Call) {
-        log(call, "start", "startMs=$startedAtMs")
-    }
+    override fun callStart(call: Call) = log(call, "REQUEST_START")
 
     override fun connectionAcquired(call: Call, connection: Connection) {
         protocol = connection.protocol()
-        log(call, "connection_acquired")
+        log(call, "CONNECTION_ACQUIRED")
     }
+
+    override fun requestHeadersStart(call: Call) = log(call, "REQUEST_HEADERS_START")
 
     override fun responseHeadersEnd(call: Call, response: Response) {
         protocol = response.protocol
         statusCode = response.code
-        log(call, "response_headers")
+        log(call, "HEADERS_RECEIVED")
     }
+
+    override fun responseBodyStart(call: Call) = log(call, "BODY_READ_START")
 
     override fun responseBodyEnd(call: Call, byteCount: Long) {
         normalEof = true
-        log(call, "response_eof", "normalEof=true bytes=$byteCount")
+        log(call, "BODY_EOF", "normalEof=true bytes=$byteCount")
     }
 
     override fun canceled(call: Call) {
-        log(call, "cancel", "cancelled=true")
-    }
-
-    override fun callEnd(call: Call) {
+        val cancellation = call.request().aiRequestTrace()?.coroutineCancellation()
         log(
             call,
-            "end",
-            "endMs=${System.currentTimeMillis()} normalEof=$normalEof cancelled=${call.isCanceled()}",
+            "LOCAL_CALL_CANCEL",
+            "normalEof=$normalEof coroutineCancellation=${cancellation?.javaClass?.name ?: "none"} " +
+                "cancellationMessage=${cancellation?.message.safeForAiDiagnostics()}",
+            Throwable("LOCAL CALL.CANCEL() invocation stack"),
         )
     }
+
+    override fun callEnd(call: Call) = log(
+        call,
+        "REQUEST_SUCCESS",
+        "normalEof=$normalEof callCancelled=${call.isCanceled()}",
+    )
 
     override fun callFailed(call: Call, ioe: IOException) {
-        val root = ioe.rootCause()
+        val trace = call.request().aiRequestTrace()
+        val cancelled = call.isCanceled() || trace?.coroutineCancellation() != null
         log(
             call,
-            "failure",
-            "endMs=${System.currentTimeMillis()} normalEof=$normalEof cancelled=${call.isCanceled()} " +
-                "exception=${ioe.javaClass.name} message=${ioe.message.safeForLog()} " +
-                "rootCause=${root.javaClass.name} rootMessage=${root.message.safeForLog()}",
+            if (cancelled) "REQUEST_CANCELLED" else "REMOTE_CONNECTION_FAILURE",
+            "normalEof=$normalEof callCancelled=${call.isCanceled()}",
+            ioe,
         )
     }
 
-    private fun log(call: Call, stage: String, extra: String = "") {
+    private fun log(call: Call, event: String, extra: String = "", error: Throwable? = null) {
         val request = call.request()
+        val trace = request.aiRequestTrace()
         val description = request.describeAiRequest()
-        val durationMs = (System.nanoTime() - startedAtNanos) / 1_000_000
-        Log.i(
-            TAG,
-            "id=$requestId stage=$stage provider=${description.provider} host=${description.host} " +
-                "pathType=${description.pathType} streaming=${description.streaming} " +
-                "protocol=${protocol?.name ?: "UNKNOWN"} status=${statusCode ?: "none"} " +
-                "durationMs=$durationMs thread=${Thread.currentThread().name} $extra",
-        )
-    }
-
-    private fun Throwable.rootCause(): Throwable {
-        var current = this
-        while (current.cause != null && current.cause !== current) {
-            current = current.cause!!
+        val durationMs = trace?.durationMillis()
+            ?: (System.nanoTime() - startedAtNanos) / 1_000_000
+        val root = error?.rootCauseForAiDiagnostics()
+        val message = buildString {
+            append("event=").append(event)
+            append(" requestId=").append(trace?.requestId ?: fallbackRequestId)
+            append(" provider=").append(trace?.provider ?: description.provider)
+            append(" host=").append(description.host)
+            append(" pathType=").append(description.pathType)
+            append(" stream=").append(trace?.streaming ?: description.streaming)
+            append(" protocol=").append(protocol?.name ?: "UNKNOWN")
+            append(" status=").append(statusCode ?: "none")
+            append(" durationMs=").append(durationMs)
+            append(" closeReason=").append(trace?.closeReason() ?: "not_traced")
+            append(" thread=").append(Thread.currentThread().name)
+            if (error != null) {
+                append(" exceptionClass=").append(error.javaClass.name)
+                append(" exceptionMessage=").append(error.message.safeForAiDiagnostics())
+                append(" rootCause=").append(root?.javaClass?.name ?: "none")
+                append(" rootMessage=").append(root?.message.safeForAiDiagnostics())
+            }
+            if (extra.isNotBlank()) append(' ').append(extra)
         }
-        return current
+        if (error == null) Log.i(TAG, message) else Log.w(TAG, message, error)
     }
-
-    private fun String?.safeForLog(): String = this
-        ?.replace(Regex("[\\r\\n\\t]+"), " ")
-        ?.take(300)
-        ?: "none"
 
     private companion object {
-        val nextRequestId = AtomicLong(0)
+        val fallbackSequence = AtomicLong(0)
     }
 }

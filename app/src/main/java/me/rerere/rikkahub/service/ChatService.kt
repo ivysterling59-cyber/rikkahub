@@ -309,11 +309,11 @@ class ChatService(
 
         val session = getOrCreateSession(conversationId)
         val previousJob = session.getJob()
-        previousJob?.cancel()
+        previousJob?.cancelGeneration("new_message", conversationId)
 
         val job = appScope.launch {
             try {
-                runCatching { previousJob?.join() }
+                previousJob?.join()
                 finishInterruptedPendingTools(conversationId)
 
                 val currentConversation = session.state.value
@@ -337,6 +337,9 @@ class ChatService(
                 }
 
                 _generationDoneFlow.emit(conversationId)
+            } catch (e: CancellationException) {
+                logGenerationCancellation("sendMessage", conversationId, e)
+                throw e
             } catch (e: Exception) {
                 e.printStackTrace()
                 addError(e, conversationId, title = context.getString(R.string.error_title_send_message))
@@ -371,7 +374,7 @@ class ChatService(
         regenerateAssistantMsg: Boolean = true
     ) {
         val session = getOrCreateSession(conversationId)
-        session.getJob()?.cancel()
+        session.getJob()?.cancelGeneration("regenerate", conversationId)
 
         val job = appScope.launch {
             try {
@@ -397,6 +400,9 @@ class ChatService(
                 }
 
                 _generationDoneFlow.emit(conversationId)
+            } catch (e: CancellationException) {
+                logGenerationCancellation("regenerateAtMessage", conversationId, e)
+                throw e
             } catch (e: Exception) {
                 addError(e, conversationId, title = context.getString(R.string.error_title_regenerate_message))
             }
@@ -415,7 +421,7 @@ class ChatService(
         answer: String? = null,
     ) {
         val session = getOrCreateSession(conversationId)
-        session.getJob()?.cancel()
+        session.getJob()?.cancelGeneration("tool_approval", conversationId)
 
         val job = appScope.launch {
             try {
@@ -460,6 +466,9 @@ class ChatService(
                 }
 
                 _generationDoneFlow.emit(conversationId)
+            } catch (e: CancellationException) {
+                logGenerationCancellation("handleToolApproval", conversationId, e)
+                throw e
             } catch (e: Exception) {
                 addError(e, conversationId, title = context.getString(R.string.error_title_tool_approval))
             }
@@ -624,6 +633,11 @@ class ChatService(
             // 兜底取消 Live Update 通知（生成开始前失败时 onCompletion 不会执行）
             appEventBus.tryEmit(AppEvent.ChatGenerationEnded(conversationId, senderName, null))
 
+            if (it is CancellationException) {
+                logGenerationCancellation("handleMessageComplete", conversationId, it)
+                throw it
+            }
+
             it.printStackTrace()
             addError(it, conversationId, title = context.getString(R.string.error_title_generation))
             Logging.log(TAG, "handleMessageComplete: $it")
@@ -776,6 +790,10 @@ class ChatService(
                 )
             }
         }.onFailure {
+            if (it is CancellationException) {
+                logGenerationCancellation("generateTitle", conversationId, it)
+                throw it
+            }
             it.printStackTrace()
             addError(
                 error = it,
@@ -835,6 +853,10 @@ class ChatService(
                 )
             )
         }.onFailure {
+            if (it is CancellationException) {
+                logGenerationCancellation("generateSuggestion", conversationId, it)
+                throw it
+            }
             it.printStackTrace()
         }
     }
@@ -1267,8 +1289,31 @@ class ChatService(
     // 停止当前会话生成任务（不清理会话缓存）
     suspend fun stopGeneration(conversationId: Uuid) {
         val job = sessions[conversationId]?.getJob() ?: return
-        job.cancel()
+        job.cancelGeneration("user_stop", conversationId)
         runCatching { job.join() }
         finishInterruptedPendingTools(conversationId)
+    }
+
+    private fun Job.cancelGeneration(reason: String, conversationId: Uuid) {
+        Log.w(
+            "AiHttpDiag",
+            "event=GENERATION_JOB_CANCEL source=ChatService reason=$reason " +
+                "conversationId=$conversationId jobActive=$isActive jobCancelled=$isCancelled",
+            Throwable("Generation job cancellation stack"),
+        )
+        cancel(CancellationException(reason))
+    }
+
+    private fun logGenerationCancellation(
+        source: String,
+        conversationId: Uuid,
+        cause: CancellationException,
+    ) {
+        Log.w(
+            "AiHttpDiag",
+            "event=REQUEST_CANCELLED source=$source conversationId=$conversationId " +
+                "cause=${cause.javaClass.name} message=${cause.message ?: "none"}",
+            cause,
+        )
     }
 }

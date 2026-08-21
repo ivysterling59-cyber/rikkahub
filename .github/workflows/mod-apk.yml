@@ -1,13 +1,13 @@
-name: Build HTTP1 Test APK
+name: Build Network Diagnostic APK
 
 on:
   push:
     branches:
-      - codex/http1-ai-test
+      - codex/network-debug
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -54,26 +54,30 @@ jobs:
           keyPassword=${{ secrets.MOD_KEY_PASSWORD }}
           EOF
 
-      - name: Build ARM64 release APK
+      - name: Run network diagnostic tests
         run: |
           chmod +x gradlew
+          ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.data.ai.AiHttpDiagnosticsTest --no-configuration-cache
+
+      - name: Build signed universal release APK
+        run: |
           ./gradlew assembleRelease
-          cp app/build/outputs/apk/release/app-arm64-v8a-release.apk RikkaHub-2.4.10-http1-test-arm64.apk
+          cp app/build/outputs/apk/release/app-universal-release.apk RikkaHub-network-debug.apk
 
       - name: Verify release APK
         run: |
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
           AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)
-          "$APKSIGNER" verify --verbose --print-certs RikkaHub-2.4.10-http1-test-arm64.apk
-          "$AAPT" dump badging RikkaHub-2.4.10-http1-test-arm64.apk | grep "package: name='com.ivysterling59cyber.rikkahub'"
-          "$AAPT" dump badging RikkaHub-2.4.10-http1-test-arm64.apk | grep "versionName='2.4.10-http1-test'"
-          sha256sum RikkaHub-2.4.10-http1-test-arm64.apk > RikkaHub-2.4.10-http1-test-arm64.apk.sha256
+          "$APKSIGNER" verify --verbose --print-certs RikkaHub-network-debug.apk
+          "$AAPT" dump badging RikkaHub-network-debug.apk | grep "package: name='com.ivysterling59cyber.rikkahub'"
+          "$AAPT" dump badging RikkaHub-network-debug.apk | grep "versionName='2.4.10-network-debug'"
+          sha256sum RikkaHub-network-debug.apk > RikkaHub-network-debug.apk.sha256
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RikkaHub-2.4.10-http1-test-arm64
+          name: RikkaHub-network-debug
           path: |
-            RikkaHub-2.4.10-http1-test-arm64.apk
-            RikkaHub-2.4.10-http1-test-arm64.apk.sha256
+            RikkaHub-network-debug.apk
+            RikkaHub-network-debug.apk.sha256
           if-no-files-found: error

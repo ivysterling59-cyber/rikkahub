@@ -55,8 +55,10 @@ import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
+import me.rerere.common.http.aiRequestTrace
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.common.http.jsonPrimitiveOrNull
+import me.rerere.common.http.withAiRequestTrace
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -95,6 +97,7 @@ class ResponseAPI(
             )
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
+            .withAiRequestTrace(provider = "openai-compatible-responses", streaming = false)
             .build()
 
         val response = client.newCall(request).await()
@@ -129,10 +132,11 @@ class ResponseAPI(
                 "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}"
             )
             .configureReferHeaders(providerSetting.baseUrl)
+            .withAiRequestTrace(provider = "openai-compatible-responses", streaming = true)
             .build()
 
         val cancellationDiagnostics = AiStreamCancellationDiagnostics(
-            provider = "openai-compatible",
+            trace = requireNotNull(request.aiRequestTrace()),
             flowJob = coroutineContext[kotlinx.coroutines.Job],
         )
         val decoder = ResponseApiStreamDecoder()
@@ -152,6 +156,7 @@ class ResponseAPI(
                 type: String?,
                 data: String
             ) {
+                cancellationDiagnostics.onEvent()
                 try {
                     val result = decoder.accept(SseEvent(id = id, event = type, data = data))
                     sendChunks(result.chunks)
@@ -160,7 +165,7 @@ class ResponseAPI(
                         close()
                     }
                 } catch (e: Throwable) {
-                    cancellationDiagnostics.mark("decode_failure")
+                    cancellationDiagnostics.mark("decode_failure", e)
                     close(e)
                 }
             }
@@ -180,7 +185,7 @@ class ResponseAPI(
                     Log.w(TAG, "onFailure: failed to parse provider error body (${e.javaClass.name})")
                     e.printStackTrace()
                 } finally {
-                    cancellationDiagnostics.mark("network_failure")
+                    cancellationDiagnostics.mark("network_failure", exception)
                     close(exception)
                 }
             }
