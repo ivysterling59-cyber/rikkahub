@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -81,3 +81,20 @@ jobs:
             RikkaHub-network-debug.apk
             RikkaHub-network-debug.apk.sha256
           if-no-files-found: error
+
+      - name: Publish network diagnostic prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="network-debug-v2.4.10-1"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" RikkaHub-network-debug.apk RikkaHub-network-debug.apk.sha256 --clobber
+          else
+            gh release create "$TAG" \
+              RikkaHub-network-debug.apk \
+              RikkaHub-network-debug.apk.sha256 \
+              --target "$GITHUB_SHA" \
+              --title "RikkaHub 2.4.10 Network Diagnostic Test" \
+              --notes "Diagnostic prerelease for identifying coroutine cancellation, local OkHttp Call.cancel(), response-body EOF, timeout, and remote connection failures. Does not force HTTP/1.1 and does not log API keys, prompts, or response content." \
+              --prerelease
+          fi
