@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.rerere.common.http.AiHttpDiag
 import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
@@ -1295,11 +1296,11 @@ class ChatService(
     }
 
     private fun Job.cancelGeneration(reason: String, conversationId: Uuid) {
-        Log.w(
-            "AiHttpDiag",
-            "event=GENERATION_JOB_CANCEL source=ChatService reason=$reason " +
+        AiHttpDiag.warn(
+            event = "GENERATION_JOB_CANCEL",
+            message = "source=ChatService reason=$reason " +
                 "conversationId=$conversationId jobActive=$isActive jobCancelled=$isCancelled",
-            Throwable("Generation job cancellation stack"),
+            throwable = Throwable("Generation job cancellation stack"),
         )
         cancel(CancellationException(reason))
     }
@@ -1309,11 +1310,11 @@ class ChatService(
         conversationId: Uuid,
         cause: CancellationException,
     ) {
-        Log.w(
-            "AiHttpDiag",
-            "event=REQUEST_CANCELLED source=$source conversationId=$conversationId " +
+        AiHttpDiag.warn(
+            event = "REQUEST_CANCELLED",
+            message = "source=$source conversationId=$conversationId " +
                 "cause=${cause.javaClass.name} message=${cause.message ?: "none"}",
-            cause,
+            throwable = cause,
         )
     }
 }

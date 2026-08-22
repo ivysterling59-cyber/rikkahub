@@ -64,6 +64,7 @@ import me.rerere.hugeicons.stroke.Share04
 import me.rerere.hugeicons.stroke.Sun01
 import me.rerere.hugeicons.stroke.WavingHand01
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.isNotConfigured
 import me.rerere.rikkahub.data.files.FilesManager
@@ -278,6 +279,22 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         },
                         headlineContent = { Text(stringResource(R.string.setting_page_chat_storage)) },
                     )
+                }
+            }
+
+            if (BuildConfig.NETWORK_DIAG_ENABLED) {
+                item("networkDiagnostics") {
+                    CardGroup(
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        title = { Text("开发者 / 调试") },
+                    ) {
+                        item(
+                            onClick = { navController.navigate(Screen.NetworkDiagnosticLog) },
+                            leadingContent = { Icon(HugeIcons.Bookshelf01, null) },
+                            supportingContent = { Text("查看、筛选、复制和导出 AiHttpDiag 日志") },
+                            headlineContent = { Text("网络诊断日志") },
+                        )
+                    }
                 }
             }
 

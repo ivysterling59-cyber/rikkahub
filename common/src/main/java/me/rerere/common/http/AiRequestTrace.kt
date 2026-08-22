@@ -1,11 +1,8 @@
 package me.rerere.common.http
 
-import android.util.Log
 import okhttp3.Request
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
-
-private const val AI_HTTP_DIAGNOSTICS_TAG = "AiHttpDiag"
 
 /**
  * Non-sensitive correlation data attached to every text-generation HTTP request.
@@ -41,25 +38,18 @@ class AiRequestTrace private constructor(
     fun eventCount(): Long = eventCount.get()
 
     fun log(event: String, extra: String = "", error: Throwable? = null) {
-        val root = error?.rootCauseForAiDiagnostics()
         val details = buildString {
-            append("event=").append(event)
-            append(" requestId=").append(requestId)
-            append(" provider=").append(provider)
-            append(" stream=").append(streaming)
+            append("stream=").append(streaming)
             append(" durationMs=").append(durationMillis())
             append(" closeReason=").append(closeReason())
             append(" thread=").append(Thread.currentThread().name)
-            if (error != null) {
-                append(" exceptionClass=").append(error.javaClass.name)
-                append(" exceptionMessage=").append(error.message.safeForAiDiagnostics())
-                append(" rootCause=").append(root?.javaClass?.name ?: "none")
-                append(" rootMessage=").append(root?.message.safeForAiDiagnostics())
-            }
             if (extra.isNotBlank()) append(' ').append(extra)
         }
-        if (error == null) Log.i(AI_HTTP_DIAGNOSTICS_TAG, details)
-        else Log.w(AI_HTTP_DIAGNOSTICS_TAG, details, error)
+        if (error == null) {
+            AiHttpDiag.info(event, requestId, provider, message = details)
+        } else {
+            AiHttpDiag.warn(event, requestId, provider, message = details, throwable = error)
+        }
     }
 
     companion object {
@@ -88,5 +78,10 @@ fun Throwable.rootCauseForAiDiagnostics(): Throwable {
 
 fun String?.safeForAiDiagnostics(): String = this
     ?.replace(Regex("[\\r\\n\\t]+"), " ")
+    ?.replace(Regex("(?i)(https?://[^\\s?]+)\\?[^\\s]+"), "$1?<redacted>")
+    ?.replace(
+        Regex("(?i)\\b(api[_-]?key|key|access[_-]?token|authorization|cookie)=([^\\s&]+)"),
+        "$1=<redacted>",
+    )
     ?.take(300)
     ?: "none"

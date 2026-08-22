@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import me.rerere.common.http.AiHttpDiag
 import me.rerere.rikkahub.data.model.Conversation
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
@@ -73,21 +74,21 @@ class ConversationSession(
     fun setJob(job: Job?) {
         val previous = _generationJob.value
         if (previous != null && previous !== job && previous.isActive) {
-            Log.w(
-                "AiHttpDiag",
-                "event=GENERATION_JOB_CANCEL source=ConversationSession.setJob " +
+            AiHttpDiag.warn(
+                event = "GENERATION_JOB_CANCEL",
+                message = "source=ConversationSession.setJob " +
                     "conversationId=$id reason=session_job_replaced jobActive=${previous.isActive} " +
                     "jobCancelled=${previous.isCancelled}",
-                Throwable("Generation job replacement stack"),
+                throwable = Throwable("Generation job replacement stack"),
             )
             previous.cancel(CancellationException("session_job_replaced"))
         }
         _generationJob.value = job
         job?.invokeOnCompletion { cause ->
             val clearedCurrentJob = _generationJob.compareAndSet(job, null)
-            Log.i(
-                "AiHttpDiag",
-                "event=GENERATION_JOB_COMPLETED conversationId=$id " +
+            AiHttpDiag.info(
+                event = "GENERATION_JOB_COMPLETED",
+                message = "conversationId=$id " +
                     "cause=${cause?.javaClass?.name ?: "none"} message=${cause?.message ?: "none"} " +
                     "jobCancelled=${job.isCancelled} clearedCurrentJob=$clearedCurrentJob",
             )
@@ -117,12 +118,12 @@ class ConversationSession(
     fun cleanup() {
         _generationJob.value?.let { job ->
             if (job.isActive) {
-                Log.w(
-                    "AiHttpDiag",
-                    "event=GENERATION_JOB_CANCEL source=ConversationSession.cleanup " +
+                AiHttpDiag.warn(
+                    event = "GENERATION_JOB_CANCEL",
+                    message = "source=ConversationSession.cleanup " +
                         "conversationId=$id reason=session_cleanup jobActive=${job.isActive} " +
                         "jobCancelled=${job.isCancelled}",
-                    Throwable("Conversation session cleanup stack"),
+                    throwable = Throwable("Conversation session cleanup stack"),
                 )
                 job.cancel(CancellationException("session_cleanup"))
             }

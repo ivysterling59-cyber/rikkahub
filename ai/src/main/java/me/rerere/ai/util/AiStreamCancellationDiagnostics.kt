@@ -47,7 +47,7 @@ class AiStreamCancellationDiagnostics(
         if (count == 1L) {
             trace.log("TOKEN_RECEIVED", "eventCount=1")
             lastProgressLogNanos = now
-        } else if (count % 50L == 0L || now - lastProgressLogNanos >= PROGRESS_INTERVAL_NANOS) {
+        } else if (now - lastProgressLogNanos >= PROGRESS_INTERVAL_NANOS) {
             trace.log("BODY_PROGRESS", "eventCount=$count")
             lastProgressLogNanos = now
         }
@@ -69,6 +69,6 @@ class AiStreamCancellationDiagnostics(
     }
 
     private companion object {
-        const val PROGRESS_INTERVAL_NANOS = 10_000_000_000L
+        const val PROGRESS_INTERVAL_NANOS = 2_000_000_000L
     }
 }

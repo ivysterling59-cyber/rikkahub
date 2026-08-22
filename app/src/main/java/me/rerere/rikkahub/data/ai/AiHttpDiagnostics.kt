@@ -1,8 +1,7 @@
 package me.rerere.rikkahub.data.ai
 
-import android.util.Log
+import me.rerere.common.http.AiHttpDiag
 import me.rerere.common.http.aiRequestTrace
-import me.rerere.common.http.rootCauseForAiDiagnostics
 import me.rerere.common.http.safeForAiDiagnostics
 import okhttp3.Call
 import okhttp3.Connection
@@ -14,14 +13,12 @@ import okhttp3.Response
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicLong
 
-private const val TAG = "AiHttpDiag"
-
 /** Adds request diagnostics to the AI client without changing protocols or timeouts. */
 internal fun OkHttpClient.newDiagnosedAiClient(logConfiguration: Boolean = true): OkHttpClient {
     if (logConfiguration) {
-        Log.i(
-            TAG,
-            "event=AI_CLIENT_CONFIG connectTimeoutMs=$connectTimeoutMillis " +
+        AiHttpDiag.info(
+            event = "AI_CLIENT_CONFIG",
+            message = "connectTimeoutMs=$connectTimeoutMillis " +
                 "readTimeoutMs=$readTimeoutMillis writeTimeoutMs=$writeTimeoutMillis " +
                 "callTimeoutMs=$callTimeoutMillis pingIntervalMs=$pingIntervalMillis " +
                 "protocols=${protocols.joinToString { it.name }} " +
@@ -131,28 +128,23 @@ private class AiHttpEventListener : EventListener() {
         val description = request.describeAiRequest()
         val durationMs = trace?.durationMillis()
             ?: (System.nanoTime() - startedAtNanos) / 1_000_000
-        val root = error?.rootCauseForAiDiagnostics()
         val message = buildString {
-            append("event=").append(event)
-            append(" requestId=").append(trace?.requestId ?: fallbackRequestId)
-            append(" provider=").append(trace?.provider ?: description.provider)
-            append(" host=").append(description.host)
-            append(" pathType=").append(description.pathType)
+            append("pathType=").append(description.pathType)
             append(" stream=").append(trace?.streaming ?: description.streaming)
             append(" protocol=").append(protocol?.name ?: "UNKNOWN")
-            append(" status=").append(statusCode ?: "none")
+            append(" statusCode=").append(statusCode ?: "none")
             append(" durationMs=").append(durationMs)
             append(" closeReason=").append(trace?.closeReason() ?: "not_traced")
             append(" thread=").append(Thread.currentThread().name)
-            if (error != null) {
-                append(" exceptionClass=").append(error.javaClass.name)
-                append(" exceptionMessage=").append(error.message.safeForAiDiagnostics())
-                append(" rootCause=").append(root?.javaClass?.name ?: "none")
-                append(" rootMessage=").append(root?.message.safeForAiDiagnostics())
-            }
             if (extra.isNotBlank()) append(' ').append(extra)
         }
-        if (error == null) Log.i(TAG, message) else Log.w(TAG, message, error)
+        val requestId = trace?.requestId ?: fallbackRequestId
+        val provider = trace?.provider ?: description.provider
+        if (error == null) {
+            AiHttpDiag.info(event, requestId, provider, description.host, message)
+        } else {
+            AiHttpDiag.warn(event, requestId, provider, description.host, message, error)
+        }
     }
 
     private companion object {
