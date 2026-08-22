@@ -18,6 +18,9 @@ class AiRequestTrace private constructor(
     private val closeReason = AtomicReference("not_closed")
     private val eventCount = AtomicLong(0)
     private val coroutineCancellation = AtomicReference<Throwable?>(null)
+    private val networkMode = AtomicReference<String?>(null)
+    private val clientId = AtomicReference<String?>(null)
+    private val connectionPoolId = AtomicReference<String?>(null)
 
     fun durationMillis(): Long = (System.nanoTime() - startedAtNanos) / 1_000_000
 
@@ -37,11 +40,20 @@ class AiRequestTrace private constructor(
 
     fun eventCount(): Long = eventCount.get()
 
+    fun markHttpClient(networkMode: String, clientId: String, connectionPoolId: String) {
+        this.networkMode.set(networkMode)
+        this.clientId.set(clientId)
+        this.connectionPoolId.set(connectionPoolId)
+    }
+
     fun log(event: String, extra: String = "", error: Throwable? = null) {
         val details = buildString {
             append("stream=").append(streaming)
             append(" durationMs=").append(durationMillis())
             append(" closeReason=").append(closeReason())
+            networkMode.get()?.let { append(" networkMode=").append(it) }
+            clientId.get()?.let { append(" clientId=").append(it) }
+            connectionPoolId.get()?.let { append(" connectionPoolId=").append(it) }
             append(" thread=").append(Thread.currentThread().name)
             if (extra.isNotBlank()) append(' ').append(extra)
         }

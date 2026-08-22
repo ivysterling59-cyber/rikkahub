@@ -25,12 +25,14 @@ import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.provider.AiHttpClientProvider
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.fixedAiHttpClientProvider
 import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
@@ -73,9 +75,13 @@ import kotlin.time.Clock
 private const val TAG = "ResponseAPI"
 
 class ResponseAPI(
-    private val client: OkHttpClient,
+    private val clientProvider: AiHttpClientProvider,
     private val keyRoulette: KeyRoulette = KeyRoulette.default()
 ) : OpenAIImpl {
+    constructor(client: OkHttpClient, keyRoulette: KeyRoulette = KeyRoulette.default()) :
+        this(fixedAiHttpClientProvider(client), keyRoulette)
+
+    private val client: OkHttpClient get() = clientProvider.clientForRequest()
     override suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,

@@ -32,6 +32,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.core.merge
+import me.rerere.ai.provider.AiHttpClientProvider
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ImageGenerationParams
@@ -41,6 +42,7 @@ import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.fixedAiHttpClientProvider
 import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.provider.stream.SseEvent
@@ -242,7 +244,14 @@ private fun TokenUsage?.sum(other: TokenUsage?): TokenUsage? {
     )
 }
 
-class ClaudeProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Claude> {
+class ClaudeProvider(
+    private val clientProvider: AiHttpClientProvider,
+    context: Context? = null,
+) : Provider<ProviderSetting.Claude> {
+    constructor(client: OkHttpClient, context: Context? = null) :
+        this(fixedAiHttpClientProvider(client), context)
+
+    private val client: OkHttpClient get() = clientProvider.clientForRequest()
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
 
     override suspend fun listModels(providerSetting: ProviderSetting.Claude): List<Model> =

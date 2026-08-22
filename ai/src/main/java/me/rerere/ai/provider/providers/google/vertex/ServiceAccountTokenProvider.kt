@@ -5,6 +5,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import me.rerere.ai.provider.AiHttpClientProvider
+import me.rerere.ai.provider.fixedAiHttpClientProvider
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -21,8 +23,10 @@ import java.util.concurrent.ConcurrentHashMap
  * 构造时传入 OkHttpClient；调用时传 email、私钥 PEM 与 scopes。
  */
 class ServiceAccountTokenProvider(
-    private val http: OkHttpClient
+    private val httpProvider: AiHttpClientProvider,
 ) {
+    constructor(http: OkHttpClient) : this(fixedAiHttpClientProvider(http))
+
     private val json = Json { ignoreUnknownKeys = true }
 
     // Token cache to avoid frequent token requests
@@ -100,7 +104,7 @@ class ServiceAccountTokenProvider(
             .header("Content-Type", "application/x-www-form-urlencoded")
             .build()
 
-        http.newCall(req).execute().use { resp ->
+        httpProvider.clientForRequest().newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) {
                 val body = resp.body.string()
                 throw IllegalStateException("Token endpoint ${resp.code}: $body")

@@ -15,7 +15,7 @@ import me.rerere.ai.provider.ProviderManager
 import me.rerere.common.http.AcceptLanguageBuilder
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
-import me.rerere.rikkahub.data.ai.newDiagnosedAiClient
+import me.rerere.rikkahub.data.ai.AiHttpClientFactory
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
 import me.rerere.rikkahub.data.ai.GenerationHandler
@@ -216,8 +216,10 @@ val dataSourceModule = module {
         SponsorAPI.create(get())
     }
 
+    single { AiHttpClientFactory(baseClient = get(), settingsStore = get()) }
+
     single {
-        ProviderManager(client = get<OkHttpClient>().newDiagnosedAiClient(), context = get())
+        ProviderManager(clientProvider = get<AiHttpClientFactory>(), context = get())
     }
 
     single {

@@ -11,14 +11,35 @@ import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
+internal data class AiHttpClientDiagnosticIdentity(
+    val networkMode: String,
+    val clientId: String,
+    val connectionPoolId: String,
+)
+
 /** Adds request diagnostics to the AI client without changing protocols or timeouts. */
-internal fun OkHttpClient.newDiagnosedAiClient(logConfiguration: Boolean = true): OkHttpClient {
+internal fun OkHttpClient.newDiagnosedAiClient(logConfiguration: Boolean = true): OkHttpClient =
+    newDiagnosedAiClient(
+        identity = AiHttpClientDiagnosticIdentity(
+        networkMode = "DEFAULT",
+        clientId = "legacy-${System.identityHashCode(this)}",
+        connectionPoolId = "pool-${System.identityHashCode(connectionPool)}",
+        ),
+        logConfiguration = logConfiguration,
+    )
+
+internal fun OkHttpClient.newDiagnosedAiClient(
+    identity: AiHttpClientDiagnosticIdentity,
+    logConfiguration: Boolean = true,
+): OkHttpClient {
     if (logConfiguration) {
         AiHttpDiag.info(
             event = "AI_CLIENT_CONFIG",
-            message = "connectTimeoutMs=$connectTimeoutMillis " +
+            message = "networkMode=${identity.networkMode} clientId=${identity.clientId} " +
+                "connectionPoolId=${identity.connectionPoolId} connectTimeoutMs=$connectTimeoutMillis " +
                 "readTimeoutMs=$readTimeoutMillis writeTimeoutMs=$writeTimeoutMillis " +
                 "callTimeoutMs=$callTimeoutMillis pingIntervalMs=$pingIntervalMillis " +
                 "protocols=${protocols.joinToString { it.name }} " +
@@ -27,7 +48,7 @@ internal fun OkHttpClient.newDiagnosedAiClient(logConfiguration: Boolean = true)
         )
     }
     return newBuilder()
-        .eventListenerFactory { AiHttpEventListener() }
+        .eventListenerFactory { AiHttpEventListener(identity) }
         .build()
 }
 
@@ -65,17 +86,34 @@ internal fun Request.describeAiRequest(): AiRequestDescription {
     )
 }
 
-private class AiHttpEventListener : EventListener() {
+private class AiHttpEventListener(
+    private val identity: AiHttpClientDiagnosticIdentity,
+) : EventListener() {
     private val fallbackRequestId = "http-${fallbackSequence.incrementAndGet()}"
     private val startedAtNanos = System.nanoTime()
     private var protocol: Protocol? = null
     private var statusCode: Int? = null
     private var normalEof = false
+    private var connectionReuse: Boolean? = null
+    private var connectionId: String? = null
 
-    override fun callStart(call: Call) = log(call, "REQUEST_START")
+    override fun callStart(call: Call) {
+        call.request().aiRequestTrace()?.markHttpClient(
+            networkMode = identity.networkMode,
+            clientId = identity.clientId,
+            connectionPoolId = identity.connectionPoolId,
+        )
+        log(call, "REQUEST_START")
+    }
 
     override fun connectionAcquired(call: Call, connection: Connection) {
         protocol = connection.protocol()
+        val requestId = call.request().aiRequestTrace()?.requestId ?: fallbackRequestId
+        val numericConnectionId = System.identityHashCode(connection)
+        connectionId = "connection-$numericConnectionId"
+        connectionReuse = connectionOwners.put(numericConnectionId, requestId)
+            ?.let { previousRequestId -> previousRequestId != requestId }
+            ?: false
         log(call, "CONNECTION_ACQUIRED")
     }
 
@@ -131,6 +169,11 @@ private class AiHttpEventListener : EventListener() {
         val message = buildString {
             append("pathType=").append(description.pathType)
             append(" stream=").append(trace?.streaming ?: description.streaming)
+            append(" networkMode=").append(identity.networkMode)
+            append(" clientId=").append(identity.clientId)
+            append(" connectionPoolId=").append(identity.connectionPoolId)
+            append(" connectionId=").append(connectionId ?: "none")
+            append(" connectionReuse=").append(connectionReuse ?: "unknown")
             append(" protocol=").append(protocol?.name ?: "UNKNOWN")
             append(" statusCode=").append(statusCode ?: "none")
             append(" durationMs=").append(durationMs)
@@ -149,5 +192,6 @@ private class AiHttpEventListener : EventListener() {
 
     private companion object {
         val fallbackSequence = AtomicLong(0)
+        val connectionOwners = ConcurrentHashMap<Int, String>()
     }
 }

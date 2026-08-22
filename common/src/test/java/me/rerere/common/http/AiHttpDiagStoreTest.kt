@@ -59,6 +59,58 @@ class AiHttpDiagStoreTest {
     }
 
     @Test
+    fun `network experiment export reports actual runtime mode and outcome`() {
+        append(
+            "request-a",
+            "REQUEST_START",
+            "stream=true networkMode=HTTP1_ONLY clientId=ai-client-2 " +
+                "connectionPoolId=shared-pool protocol=UNKNOWN statusCode=none durationMs=0",
+        )
+        append(
+            "request-a",
+            "HEADERS_RECEIVED",
+            "networkMode=HTTP1_ONLY protocol=HTTP_1_1 statusCode=200 durationMs=321",
+        )
+        append(
+            "request-a",
+            "REMOTE_CONNECTION_FAILURE",
+            "networkMode=HTTP1_ONLY protocol=HTTP_1_1 statusCode=200 durationMs=1234 " +
+                "normalEof=false callCancelled=false exceptionClass=java.io.EOFException " +
+                "exceptionMessage=unexpected end of stream rootCause=java.io.EOFException",
+        )
+
+        val text = AiHttpDiagStore.latestNetworkExperimentText(
+            appVersion = "2.4.10-network-debug3",
+            selectedMode = "DEFAULT",
+        )
+
+        assertNotNull(text)
+        assertTrue(text!!.contains("appVersion=2.4.10-network-debug3"))
+        assertTrue(text.contains("networkMode=HTTP1_ONLY"))
+        assertTrue(text.contains("protocol=HTTP_1_1"))
+        assertTrue(text.contains("statusCode=200"))
+        assertTrue(text.contains("durationMs=1234"))
+        assertTrue(text.contains("normalEof=false"))
+        assertTrue(text.contains("callCancelled=false"))
+        assertTrue(text.contains("exceptionClass=java.io.EOFException"))
+        assertTrue(text.contains("exceptionMessage=unexpected end of stream"))
+        assertTrue(text.contains("finalEvent=REMOTE_CONNECTION_FAILURE"))
+    }
+
+    @Test
+    fun `network experiment export falls back to selected mode before runtime metadata exists`() {
+        append("request-a", "REQUEST_START", "stream=false")
+
+        val text = AiHttpDiagStore.latestNetworkExperimentText(
+            appVersion = "test",
+            selectedMode = "FRESH_CONNECTION",
+        )
+
+        assertTrue(text!!.contains("networkMode=FRESH_CONNECTION"))
+        assertTrue(text.contains("finalEvent=REQUEST_START"))
+    }
+
+    @Test
     fun `diagnostic messages redact URL queries and credential parameters`() {
         val message = "failed https://api.example.com/v1/chat?key=secret&mode=sse api_key=another-secret"
 

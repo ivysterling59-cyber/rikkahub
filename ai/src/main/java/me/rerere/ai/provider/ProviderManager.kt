@@ -9,16 +9,18 @@ import okhttp3.OkHttpClient
 /**
  * Provider管理器，负责注册和获取Provider实例
  */
-class ProviderManager(client: OkHttpClient, context: Context) {
+class ProviderManager(clientProvider: AiHttpClientProvider, context: Context) {
     // 存储已注册的Provider实例
     private val providers = mutableMapOf<String, Provider<*>>()
 
     init {
         // 注册默认Provider
-        registerProvider("openai", OpenAIProvider(client, context))
-        registerProvider("google", GoogleProvider(client, context))
-        registerProvider("claude", ClaudeProvider(client, context))
+        registerProvider("openai", OpenAIProvider(clientProvider, context))
+        registerProvider("google", GoogleProvider(clientProvider, context))
+        registerProvider("claude", ClaudeProvider(clientProvider, context))
     }
+
+    constructor(client: OkHttpClient, context: Context) : this(fixedAiHttpClientProvider(client), context)
 
     /**
      * 注册Provider实例

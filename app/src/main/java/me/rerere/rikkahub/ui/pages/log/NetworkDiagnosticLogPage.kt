@@ -49,9 +49,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.common.http.AiHttpDiagEntry
 import me.rerere.common.http.AiHttpDiagStore
+import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.data.ai.AiNetworkMode
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
+import org.koin.androidx.compose.koinViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -64,8 +68,9 @@ private enum class DiagnosticEventFilter(val label: String) {
 }
 
 @Composable
-fun NetworkDiagnosticLogPage() {
+fun NetworkDiagnosticLogPage(vm: SettingVM = koinViewModel()) {
     val entries by AiHttpDiagStore.entries.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     var eventFilter by remember { mutableStateOf(DiagnosticEventFilter.ALL) }
     var providerFilter by remember { mutableStateOf<String?>(null) }
     var requestIdQuery by remember { mutableStateOf("") }
@@ -127,6 +132,10 @@ fun NetworkDiagnosticLogPage() {
                     count = entries.size,
                     filteredCount = filteredEntries.size,
                     lastUpdatedAt = entries.lastOrNull()?.timestamp,
+                    networkMode = settings.aiNetworkMode,
+                    onNetworkModeChange = { mode ->
+                        if (!settings.init) vm.updateAiNetworkMode(mode)
+                    },
                     onCopyLatestFailure = {
                         val text = AiHttpDiagStore.latestFailedRequestText()
                         if (text == null) {
@@ -135,6 +144,22 @@ fun NetworkDiagnosticLogPage() {
                             scope.launch {
                                 clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("AiHttpDiag", text)))
                                 Toast.makeText(context, "最近失败请求已复制", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    onCopyExperiment = {
+                        val text = AiHttpDiagStore.latestNetworkExperimentText(
+                            appVersion = BuildConfig.VERSION_NAME,
+                            selectedMode = settings.aiNetworkMode.name,
+                        )
+                        if (text == null) {
+                            Toast.makeText(context, "还没有可复制的网络请求", Toast.LENGTH_SHORT).show()
+                        } else {
+                            scope.launch {
+                                clipboard.setClipEntry(
+                                    ClipEntry(ClipData.newPlainText("RikkaHub Network Experiment", text)),
+                                )
+                                Toast.makeText(context, "当前网络实验信息已复制", Toast.LENGTH_SHORT).show()
                             }
                         }
                     },
@@ -210,7 +235,10 @@ private fun DiagnosticSummaryCard(
     count: Int,
     filteredCount: Int,
     lastUpdatedAt: Long?,
+    networkMode: AiNetworkMode,
+    onNetworkModeChange: (AiNetworkMode) -> Unit,
     onCopyLatestFailure: () -> Unit,
+    onCopyExperiment: () -> Unit,
     onExport: () -> Unit,
     onClear: () -> Unit,
 ) {
@@ -226,8 +254,24 @@ private fun DiagnosticSummaryCard(
         ) {
             Text("当前日志：$count 条（筛选后 $filteredCount 条）", style = MaterialTheme.typography.titleSmall)
             Text("最后更新：$time", style = MaterialTheme.typography.bodySmall)
+            Text("当前 AI 网络模式：${networkMode.displayName}", style = MaterialTheme.typography.bodyMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AiNetworkMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = networkMode == mode,
+                        onClick = { onNetworkModeChange(mode) },
+                        label = { Text(mode.displayName) },
+                    )
+                }
+            }
+            Text(
+                "切换后从下一次 AI 请求生效，不影响普通应用网络请求。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onCopyLatestFailure) { Text("复制最近失败") }
+                OutlinedButton(onClick = onCopyExperiment) { Text("复制当前网络实验信息") }
                 OutlinedButton(onClick = onExport) { Text("导出当前筛选") }
                 OutlinedButton(onClick = onClear) { Text("清空日志") }
             }

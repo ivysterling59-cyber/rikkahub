@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.ai.AiNetworkMode
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 
 class SettingVM(
@@ -22,5 +23,9 @@ class SettingVM(
         viewModelScope.launch {
             settingsStore.update(settings)
         }
+    }
+
+    fun updateAiNetworkMode(mode: AiNetworkMode) {
+        settingsStore.updateAiNetworkMode(mode)
     }
 }

@@ -14,6 +14,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import me.rerere.ai.provider.AiHttpClientProvider
 import me.rerere.ai.provider.EmbeddingGenerationParams
 import me.rerere.ai.provider.EmbeddingGenerationResult
 import me.rerere.ai.provider.ImageEditParams
@@ -23,6 +24,7 @@ import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.fixedAiHttpClientProvider
 import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.UIMessage
@@ -46,13 +48,17 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 private const val TAG = "OpenAIProvider"
 
 class OpenAIProvider(
-    private val client: OkHttpClient,
+    private val clientProvider: AiHttpClientProvider,
     context: Context? = null
 ) : Provider<ProviderSetting.OpenAI> {
+    constructor(client: OkHttpClient, context: Context? = null) :
+        this(fixedAiHttpClientProvider(client), context)
+
+    private val client: OkHttpClient get() = clientProvider.clientForRequest()
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
 
-    private val chatCompletionsAPI = ChatCompletionsAPI(client = client, keyRoulette = keyRoulette)
-    private val responseAPI = ResponseAPI(client = client, keyRoulette = keyRoulette)
+    private val chatCompletionsAPI = ChatCompletionsAPI(clientProvider = clientProvider, keyRoulette = keyRoulette)
+    private val responseAPI = ResponseAPI(clientProvider = clientProvider, keyRoulette = keyRoulette)
 
 
     override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =

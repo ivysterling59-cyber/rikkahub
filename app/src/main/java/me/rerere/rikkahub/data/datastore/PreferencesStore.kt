@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
@@ -24,6 +25,7 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.data.ai.AiNetworkMode
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
@@ -69,7 +71,7 @@ private val Context.settingsStore by preferencesDataStore(
 
 class SettingsStore(
     context: Context,
-    scope: AppScope,
+    private val scope: AppScope,
 ) : KoinComponent {
     companion object {
         // 版本号
@@ -81,6 +83,7 @@ class SettingsStore(
         val CUSTOM_THEMES = stringPreferencesKey("custom_themes")
         val DISPLAY_SETTING = stringPreferencesKey("display_setting")
         val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
+        val AI_NETWORK_MODE = stringPreferencesKey("ai_network_mode")
 
         // 模型选择
         val FAVORITE_MODELS = stringPreferencesKey("favorite_models")
@@ -198,6 +201,9 @@ class SettingsStore(
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
                 developerMode = preferences[DEVELOPER_MODE] == true,
+                aiNetworkMode = preferences[AI_NETWORK_MODE]
+                    ?.let { value -> runCatching { AiNetworkMode.valueOf(value) }.getOrNull() }
+                    ?: AiNetworkMode.DEFAULT,
                 displaySetting = JsonInstant.decodeFromString(preferences[DISPLAY_SETTING] ?: "{}"),
                 searchServices = preferences[SEARCH_SERVICES]?.let {
                     JsonInstant.decodeFromString(it)
@@ -356,6 +362,7 @@ class SettingsStore(
             preferences[THEME_ID] = settings.themeId
             preferences[CUSTOM_THEMES] = JsonInstant.encodeToString(settings.customThemes)
             preferences[DEVELOPER_MODE] = settings.developerMode
+            preferences[AI_NETWORK_MODE] = settings.aiNetworkMode.name
             preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
 
             preferences[FAVORITE_MODELS] = JsonInstant.encodeToString(settings.favoriteModels)
@@ -412,6 +419,16 @@ class SettingsStore(
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
+        }
+    }
+
+    /** Makes the experiment mode visible to the next AI request before persistence completes. */
+    fun updateAiNetworkMode(mode: AiNetworkMode) {
+        val current = settingsFlow.value
+        if (current.init || current.aiNetworkMode == mode) return
+        settingsFlow.value = current.copy(aiNetworkMode = mode)
+        scope.launch {
+            dataStore.edit { preferences -> preferences[AI_NETWORK_MODE] = mode.name }
         }
     }
 
@@ -513,6 +530,7 @@ data class Settings(
     val themeId: String = PresetThemes[0].id,
     val customThemes: List<CustomTheme> = emptyList(),
     val developerMode: Boolean = false,
+    val aiNetworkMode: AiNetworkMode = AiNetworkMode.DEFAULT,
     val displaySetting: DisplaySetting = DisplaySetting(),
     val favoriteModels: List<Uuid> = emptyList(),
     val chatModelId: Uuid = Uuid.random(),
