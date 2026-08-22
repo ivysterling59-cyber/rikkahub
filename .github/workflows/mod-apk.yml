@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -83,3 +83,39 @@ jobs:
             RikkaHub-network-debug3.apk
             RikkaHub-network-debug3.apk.sha256
           if-no-files-found: error
+
+      - name: Publish network experiment prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="2.4.10-network-debug3"
+          NOTES=$(cat <<'EOF'
+          更新内容:
+
+          - 新增默认、仅 HTTP/1.1、新连接三种 AI 网络实验模式。
+          - OpenAI、OpenAI Compatible、DeepSeek、Claude、Gemini 均已接入。
+          - 新连接模式为每次 AI 请求创建独立客户端和 ConnectionPool。
+          - 日志新增实际协议、模式、客户端、连接池及连接复用信息。
+          - 新增当前模式显示和“复制当前网络实验信息”；未修改超时、重试和请求生命周期。
+
+          Updates:
+
+          - Added Default, HTTP/1.1-only, and Fresh Connection AI experiment modes.
+          - Applied all modes to OpenAI, compatible APIs, DeepSeek, Claude, and Gemini.
+          - Fresh Connection mode creates an independent client and connection pool per AI request.
+          - Added runtime protocol, mode, client, pool, and connection-reuse diagnostics.
+          - Added current-mode display and experiment-summary copying without timeout, retry, or lifecycle changes.
+          EOF
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" RikkaHub-network-debug3.apk RikkaHub-network-debug3.apk.sha256 --clobber
+            gh release edit "$TAG" --title "$TAG" --notes "$NOTES" --prerelease
+          else
+            gh release create "$TAG" \
+              RikkaHub-network-debug3.apk \
+              RikkaHub-network-debug3.apk.sha256 \
+              --target "$GITHUB_SHA" \
+              --title "$TAG" \
+              --notes "$NOTES" \
+              --prerelease
+          fi
