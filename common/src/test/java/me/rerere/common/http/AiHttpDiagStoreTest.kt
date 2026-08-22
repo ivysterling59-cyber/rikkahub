@@ -69,6 +69,20 @@ class AiHttpDiagStoreTest {
         assertTrue(sanitized.contains("api_key=<redacted>"))
     }
 
+    @Test
+    fun `stored stack traces redact exception secrets`() {
+        AiHttpDiagStore.append(
+            level = AiHttpDiagLevel.WARN,
+            event = "REQUEST_FAILED",
+            requestId = "request-a",
+            throwable = IllegalStateException("failed https://api.example.com/path?key=secret"),
+        )
+
+        val stackTrace = AiHttpDiagStore.snapshot().single().stackTrace.orEmpty()
+        assertFalse(stackTrace.contains("key=secret"))
+        assertTrue(stackTrace.contains("https://api.example.com/path?<redacted>"))
+    }
+
     private fun append(requestId: String, event: String, message: String) {
         AiHttpDiagStore.append(
             level = AiHttpDiagLevel.INFO,

@@ -78,10 +78,17 @@ fun Throwable.rootCauseForAiDiagnostics(): Throwable {
 
 fun String?.safeForAiDiagnostics(): String = this
     ?.replace(Regex("[\\r\\n\\t]+"), " ")
-    ?.replace(Regex("(?i)(https?://[^\\s?]+)\\?[^\\s]+"), "$1?<redacted>")
-    ?.replace(
+    ?.redactAiDiagnosticSecrets()
+    ?.take(300)
+    ?: "none"
+
+fun Throwable.safeStackTraceForAiDiagnostics(): String = stackTraceToString()
+    .redactAiDiagnosticSecrets()
+    .take(20_000)
+
+private fun String.redactAiDiagnosticSecrets(): String = this
+    .replace(Regex("(?i)(https?://[^\\s?]+)\\?[^\\s]+"), "$1?<redacted>")
+    .replace(
         Regex("(?i)\\b(api[_-]?key|key|access[_-]?token|authorization|cookie)=([^\\s&]+)"),
         "$1=<redacted>",
     )
-    ?.take(300)
-    ?: "none"

@@ -58,7 +58,7 @@ object AiHttpDiagStore {
             host = host,
             event = event,
             message = message,
-            stackTrace = throwable?.stackTraceToString(),
+            stackTrace = throwable?.safeStackTraceForAiDiagnostics(),
         )
         synchronized(lock) {
             buffer.addLast(entry)
@@ -197,8 +197,14 @@ object AiHttpDiag {
         }
         when (level) {
             AiHttpDiagLevel.INFO -> Log.i(TAG, logcatMessage)
-            AiHttpDiagLevel.WARN -> Log.w(TAG, logcatMessage, throwable)
-            AiHttpDiagLevel.ERROR -> Log.e(TAG, logcatMessage, throwable)
+            AiHttpDiagLevel.WARN -> Log.w(
+                TAG,
+                throwable?.let { "$logcatMessage\n${it.safeStackTraceForAiDiagnostics()}" } ?: logcatMessage,
+            )
+            AiHttpDiagLevel.ERROR -> Log.e(
+                TAG,
+                throwable?.let { "$logcatMessage\n${it.safeStackTraceForAiDiagnostics()}" } ?: logcatMessage,
+            )
         }
         AiHttpDiagStore.append(
             level = level,
