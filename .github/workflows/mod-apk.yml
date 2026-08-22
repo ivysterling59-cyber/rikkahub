@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -82,3 +82,35 @@ jobs:
             RikkaHub-network-debug2.apk
             RikkaHub-network-debug2.apk.sha256
           if-no-files-found: error
+
+      - name: Publish network diagnostic prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="network-debug-v2.4.10-2"
+          NOTES=$(cat <<'EOF'
+          更新内容:
+          - 新增应用内 AiHttpDiag 网络诊断日志页面。
+          - 支持事件、Provider 和 requestId 筛选。
+          - 支持复制最近失败请求、导出 TXT 和清空日志。
+          - 使用 1500 条线程安全内存缓冲，并脱敏 URL 查询、API Key 和异常堆栈。
+
+          Updates:
+          - Added an in-app AiHttpDiag network diagnostics page.
+          - Added event, provider, and requestId filters.
+          - Added copy-latest-failure, TXT export, and clear-log actions.
+          - Added a thread-safe 1,500-entry memory buffer with URL, credential, and stack-trace redaction.
+          EOF
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" RikkaHub-network-debug2.apk RikkaHub-network-debug2.apk.sha256 --clobber
+            gh release edit "$TAG" --title "RikkaHub 2.4.10 Network Debug 2" --notes "$NOTES" --prerelease
+          else
+            gh release create "$TAG" \
+              RikkaHub-network-debug2.apk \
+              RikkaHub-network-debug2.apk.sha256 \
+              --target "$GITHUB_SHA" \
+              --title "RikkaHub 2.4.10 Network Debug 2" \
+              --notes "$NOTES" \
+              --prerelease
+          fi
