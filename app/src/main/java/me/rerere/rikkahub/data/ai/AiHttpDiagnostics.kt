@@ -178,6 +178,11 @@ private class AiHttpEventListener(
             append(" statusCode=").append(statusCode ?: "none")
             append(" durationMs=").append(durationMs)
             append(" closeReason=").append(trace?.closeReason() ?: "not_traced")
+            if ((trace?.eventCount() ?: 0) > 0) {
+                append(" eventCount=").append(trace?.eventCount())
+                append(" lastEventElapsedMs=").append(trace?.lastEventElapsedMillis() ?: "none")
+                append(" timeSinceLastEventMs=").append(trace?.timeSinceLastEventMillis() ?: "none")
+            }
             append(" thread=").append(Thread.currentThread().name)
             if (extra.isNotBlank()) append(' ').append(extra)
         }

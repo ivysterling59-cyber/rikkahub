@@ -71,6 +71,8 @@ class RequestLoggingInterceptor : Interceptor {
             "proxy-authorization",
             "x-api-key",
             "x-goog-api-key",
+            "cookie",
+            "set-cookie",
         )
     }
 }

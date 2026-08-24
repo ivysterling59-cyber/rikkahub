@@ -7,7 +7,7 @@ class AiStreamCancellationDiagnostics(
     private val trace: AiRequestTrace,
     private val flowJob: Job?,
 ) {
-    private var lastProgressLogNanos = System.nanoTime()
+    private var lastProgressLogElapsedMillis = -1L
 
     init {
         trace.log(
@@ -42,14 +42,17 @@ class AiStreamCancellationDiagnostics(
     }
 
     fun onEvent() {
-        val count = trace.recordEvent()
-        val now = System.nanoTime()
-        if (count == 1L) {
-            trace.log("TOKEN_RECEIVED", "eventCount=1")
-            lastProgressLogNanos = now
-        } else if (now - lastProgressLogNanos >= PROGRESS_INTERVAL_NANOS) {
-            trace.log("BODY_PROGRESS", "eventCount=$count")
-            lastProgressLogNanos = now
+        val timing = trace.recordSseEvent()
+        if (
+            timing.eventCount == 1L ||
+            timing.elapsedMillis - lastProgressLogElapsedMillis >= PROGRESS_INTERVAL_MILLIS
+        ) {
+            trace.log(
+                event = "SSE_PROGRESS",
+                extra = "eventCount=${timing.eventCount} elapsedMs=${timing.elapsedMillis} " +
+                    "sinceLastEventMs=${timing.sinceLastEventMillis}",
+            )
+            lastProgressLogElapsedMillis = timing.elapsedMillis
         }
     }
 
@@ -69,6 +72,6 @@ class AiStreamCancellationDiagnostics(
     }
 
     private companion object {
-        const val PROGRESS_INTERVAL_NANOS = 2_000_000_000L
+        const val PROGRESS_INTERVAL_MILLIS = 1_000L
     }
 }

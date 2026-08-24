@@ -17,6 +17,7 @@ class AiRequestTrace private constructor(
 ) {
     private val closeReason = AtomicReference("not_closed")
     private val eventCount = AtomicLong(0)
+    private val lastEventElapsedMillis = AtomicLong(-1)
     private val coroutineCancellation = AtomicReference<Throwable?>(null)
     private val networkMode = AtomicReference<String?>(null)
     private val clientId = AtomicReference<String?>(null)
@@ -36,9 +37,30 @@ class AiRequestTrace private constructor(
 
     fun coroutineCancellation(): Throwable? = coroutineCancellation.get()
 
-    fun recordEvent(): Long = eventCount.incrementAndGet()
+    fun recordEvent(): Long = recordSseEvent().eventCount
+
+    fun recordSseEvent(): AiSseEventTiming {
+        val elapsedMillis = durationMillis()
+        val previousElapsedMillis = lastEventElapsedMillis.getAndSet(elapsedMillis)
+        return AiSseEventTiming(
+            eventCount = eventCount.incrementAndGet(),
+            elapsedMillis = elapsedMillis,
+            sinceLastEventMillis = if (previousElapsedMillis >= 0) {
+                (elapsedMillis - previousElapsedMillis).coerceAtLeast(0)
+            } else {
+                elapsedMillis
+            },
+        )
+    }
 
     fun eventCount(): Long = eventCount.get()
+
+    fun lastEventElapsedMillis(): Long? = lastEventElapsedMillis.get().takeIf { it >= 0 }
+
+    fun timeSinceLastEventMillis(): Long? = lastEventElapsedMillis()
+        ?.let { (durationMillis() - it).coerceAtLeast(0) }
+
+    fun networkMode(): String? = networkMode.get()
 
     fun markHttpClient(networkMode: String, clientId: String, connectionPoolId: String) {
         this.networkMode.set(networkMode)
@@ -51,6 +73,11 @@ class AiRequestTrace private constructor(
             append("stream=").append(streaming)
             append(" durationMs=").append(durationMillis())
             append(" closeReason=").append(closeReason())
+            if (eventCount() > 0) {
+                append(" eventCount=").append(eventCount())
+                append(" lastEventElapsedMs=").append(lastEventElapsedMillis() ?: "none")
+                append(" timeSinceLastEventMs=").append(timeSinceLastEventMillis() ?: "none")
+            }
             networkMode.get()?.let { append(" networkMode=").append(it) }
             clientId.get()?.let { append(" clientId=").append(it) }
             connectionPoolId.get()?.let { append(" connectionPoolId=").append(it) }
@@ -76,6 +103,12 @@ class AiRequestTrace private constructor(
         )
     }
 }
+
+data class AiSseEventTiming(
+    val eventCount: Long,
+    val elapsedMillis: Long,
+    val sinceLastEventMillis: Long,
+)
 
 fun Request.Builder.withAiRequestTrace(provider: String, streaming: Boolean): Request.Builder =
     tag(AiRequestTrace::class.java, AiRequestTrace.create(provider, streaming))

@@ -51,6 +51,7 @@ import me.rerere.common.http.AiHttpDiagEntry
 import me.rerere.common.http.AiHttpDiagStore
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AiNetworkMode
+import me.rerere.rikkahub.data.ai.AiRequestMode
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -95,6 +96,7 @@ fun NetworkDiagnosticLogPage(vm: SettingVM = koinViewModel()) {
                 (requestIdQuery.isBlank() || entry.requestId.orEmpty().contains(requestIdQuery.trim(), true))
         }
     }
+    val failureStatistics = remember(entries) { AiHttpDiagStore.failureStatisticsText(entries) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/plain"),
@@ -133,8 +135,12 @@ fun NetworkDiagnosticLogPage(vm: SettingVM = koinViewModel()) {
                     filteredCount = filteredEntries.size,
                     lastUpdatedAt = entries.lastOrNull()?.timestamp,
                     networkMode = settings.aiNetworkMode,
+                    requestMode = settings.aiRequestMode,
                     onNetworkModeChange = { mode ->
                         if (!settings.init) vm.updateAiNetworkMode(mode)
+                    },
+                    onRequestModeChange = { mode ->
+                        if (!settings.init) vm.updateAiRequestMode(mode)
                     },
                     onCopyLatestFailure = {
                         val text = AiHttpDiagStore.latestFailedRequestText()
@@ -144,6 +150,19 @@ fun NetworkDiagnosticLogPage(vm: SettingVM = koinViewModel()) {
                             scope.launch {
                                 clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("AiHttpDiag", text)))
                                 Toast.makeText(context, "最近失败请求已复制", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    onCopyLatestFailureProfile = {
+                        val text = AiHttpDiagStore.latestFailedRequestProfileText()
+                        if (text == null) {
+                            Toast.makeText(context, "还没有失败或取消的请求", Toast.LENGTH_SHORT).show()
+                        } else {
+                            scope.launch {
+                                clipboard.setClipEntry(
+                                    ClipEntry(ClipData.newPlainText("RikkaHub Failed Request Profile", text)),
+                                )
+                                Toast.makeText(context, "最近失败 Profile 已复制", Toast.LENGTH_SHORT).show()
                             }
                         }
                     },
@@ -170,6 +189,19 @@ fun NetworkDiagnosticLogPage(vm: SettingVM = koinViewModel()) {
                     },
                     onClear = { showClearConfirmation = true },
                 )
+            }
+
+            item {
+                Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+                    SelectionContainer {
+                        Text(
+                            text = failureStatistics,
+                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = JetbrainsMono,
+                        )
+                    }
+                }
             }
 
             item {
@@ -236,8 +268,11 @@ private fun DiagnosticSummaryCard(
     filteredCount: Int,
     lastUpdatedAt: Long?,
     networkMode: AiNetworkMode,
+    requestMode: AiRequestMode,
     onNetworkModeChange: (AiNetworkMode) -> Unit,
+    onRequestModeChange: (AiRequestMode) -> Unit,
     onCopyLatestFailure: () -> Unit,
+    onCopyLatestFailureProfile: () -> Unit,
     onCopyExperiment: () -> Unit,
     onExport: () -> Unit,
     onClear: () -> Unit,
@@ -269,8 +304,24 @@ private fun DiagnosticSummaryCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Text("请求模式：${requestMode.displayName}", style = MaterialTheme.typography.bodyMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AiRequestMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = requestMode == mode,
+                        onClick = { onRequestModeChange(mode) },
+                        label = { Text(mode.displayName) },
+                    )
+                }
+            }
+            Text(
+                "最小模式仅改写流式 OpenAI Chat Completions；保留 model、messages、stream，默认仍为正常模式。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onCopyLatestFailure) { Text("复制最近失败") }
+                OutlinedButton(onClick = onCopyLatestFailureProfile) { Text("复制最近失败 Profile") }
                 OutlinedButton(onClick = onCopyExperiment) { Text("复制当前网络实验信息") }
                 OutlinedButton(onClick = onExport) { Text("导出当前筛选") }
                 OutlinedButton(onClick = onClear) { Text("清空日志") }

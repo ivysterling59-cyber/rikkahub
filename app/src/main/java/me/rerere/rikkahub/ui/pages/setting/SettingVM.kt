@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.ai.AiNetworkMode
+import me.rerere.rikkahub.data.ai.AiRequestMode
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 
 class SettingVM(
@@ -27,5 +28,9 @@ class SettingVM(
 
     fun updateAiNetworkMode(mode: AiNetworkMode) {
         settingsStore.updateAiNetworkMode(mode)
+    }
+
+    fun updateAiRequestMode(mode: AiRequestMode) {
+        settingsStore.updateAiRequestMode(mode)
     }
 }

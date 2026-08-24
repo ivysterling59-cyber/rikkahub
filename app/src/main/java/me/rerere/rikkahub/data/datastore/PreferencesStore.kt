@@ -26,6 +26,7 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.AiNetworkMode
+import me.rerere.rikkahub.data.ai.AiRequestMode
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
@@ -84,6 +85,7 @@ class SettingsStore(
         val DISPLAY_SETTING = stringPreferencesKey("display_setting")
         val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
         val AI_NETWORK_MODE = stringPreferencesKey("ai_network_mode")
+        val AI_REQUEST_MODE = stringPreferencesKey("ai_request_mode")
 
         // 模型选择
         val FAVORITE_MODELS = stringPreferencesKey("favorite_models")
@@ -204,6 +206,9 @@ class SettingsStore(
                 aiNetworkMode = preferences[AI_NETWORK_MODE]
                     ?.let { value -> runCatching { AiNetworkMode.valueOf(value) }.getOrNull() }
                     ?: AiNetworkMode.DEFAULT,
+                aiRequestMode = preferences[AI_REQUEST_MODE]
+                    ?.let { value -> runCatching { AiRequestMode.valueOf(value) }.getOrNull() }
+                    ?: AiRequestMode.NORMAL,
                 displaySetting = JsonInstant.decodeFromString(preferences[DISPLAY_SETTING] ?: "{}"),
                 searchServices = preferences[SEARCH_SERVICES]?.let {
                     JsonInstant.decodeFromString(it)
@@ -363,6 +368,7 @@ class SettingsStore(
             preferences[CUSTOM_THEMES] = JsonInstant.encodeToString(settings.customThemes)
             preferences[DEVELOPER_MODE] = settings.developerMode
             preferences[AI_NETWORK_MODE] = settings.aiNetworkMode.name
+            preferences[AI_REQUEST_MODE] = settings.aiRequestMode.name
             preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
 
             preferences[FAVORITE_MODELS] = JsonInstant.encodeToString(settings.favoriteModels)
@@ -429,6 +435,16 @@ class SettingsStore(
         settingsFlow.value = current.copy(aiNetworkMode = mode)
         scope.launch {
             dataStore.edit { preferences -> preferences[AI_NETWORK_MODE] = mode.name }
+        }
+    }
+
+    /** Makes the debug request-shape experiment visible to the next AI request immediately. */
+    fun updateAiRequestMode(mode: AiRequestMode) {
+        val current = settingsFlow.value
+        if (current.init || current.aiRequestMode == mode) return
+        settingsFlow.value = current.copy(aiRequestMode = mode)
+        scope.launch {
+            dataStore.edit { preferences -> preferences[AI_REQUEST_MODE] = mode.name }
         }
     }
 
@@ -531,6 +547,7 @@ data class Settings(
     val customThemes: List<CustomTheme> = emptyList(),
     val developerMode: Boolean = false,
     val aiNetworkMode: AiNetworkMode = AiNetworkMode.DEFAULT,
+    val aiRequestMode: AiRequestMode = AiRequestMode.NORMAL,
     val displaySetting: DisplaySetting = DisplaySetting(),
     val favoriteModels: List<Uuid> = emptyList(),
     val chatModelId: Uuid = Uuid.random(),

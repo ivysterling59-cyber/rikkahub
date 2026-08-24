@@ -9,6 +9,7 @@ import java.util.ArrayDeque
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.roundToLong
 
 enum class AiHttpDiagLevel {
     INFO,
@@ -106,6 +107,133 @@ object AiHttpDiagStore {
         }
     }
 
+    /** Client-fingerprint export. Values come only from the allowlisted diagnostic profile fields. */
+    fun latestFailedRequestProfileText(source: List<AiHttpDiagEntry> = snapshot()): String? {
+        val terminalIndex = source.indexOfLast { it.isFailureTerminal() && !it.requestId.isNullOrBlank() }
+        if (terminalIndex < 0) return null
+        val terminal = source[terminalIndex]
+        val requestId = terminal.requestId ?: return null
+        val requestEntries = source.subList(0, terminalIndex + 1).filter { it.requestId == requestId }
+        val messages = requestEntries.map { it.message }
+
+        fun field(name: String): String? = messages.asSequence()
+            .mapNotNull { message -> fieldValue(message, name) }
+            .lastOrNull()
+        fun value(name: String): String = field(name)
+            ?.takeUnless { it.equals("none", true) }
+            ?: "null"
+        fun header(section: String, name: String): String = value("$section.$name")
+
+        val provider = requestEntries.firstNotNullOfOrNull { it.provider } ?: "unknown"
+        val host = requestEntries.firstNotNullOfOrNull { it.host } ?: "unknown"
+        val fields = field("fields")
+            ?.removePrefix("[")
+            ?.removeSuffix("]")
+            ?.split(',')
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+
+        return buildString {
+            appendLine("=== RikkaHub Failed Request Profile ===")
+            appendLine()
+            appendLine("requestId=$requestId")
+            appendLine("provider=$provider")
+            appendLine("host=$host")
+            appendLine("model=${value("model")}")
+            appendLine()
+            appendLine("networkMode=${value("networkMode")}")
+            appendLine("requestMode=${value("requestMode")}")
+            appendLine("protocol=${value("protocol")}")
+            appendLine("stream=${value("stream")}")
+            appendLine()
+            appendLine("durationMs=${value("durationMs")}")
+            appendLine("eventCount=${value("eventCount")}")
+            appendLine("lastEventElapsedMs=${value("lastEventElapsedMs")}")
+            appendLine("timeSinceLastEventMs=${value("timeSinceLastEventMs")}")
+            appendLine()
+            appendLine("Request Headers:")
+            REQUEST_PROFILE_HEADERS.forEach { name -> appendLine("$name=${header("request", name)}") }
+            appendLine()
+            appendLine("Request Fields:")
+            if (fields.isEmpty()) appendLine("null") else fields.forEach { appendLine(it) }
+            appendLine("streamOptionsPresent=${value("streamOptionsPresent")}")
+            appendLine("includeUsage=${value("includeUsage")}")
+            appendLine("temperaturePresent=${value("temperaturePresent")}")
+            appendLine("toolsPresent=${value("toolsPresent")}")
+            appendLine()
+            appendLine("Response:")
+            appendLine("status=${value("statusCode")}")
+            RESPONSE_PROFILE_HEADERS.forEach { name -> appendLine("$name=${header("response", name)}") }
+            appendLine()
+            appendLine("Failure:")
+            appendLine("event=${terminal.event}")
+            appendLine("exceptionClass=${value("exceptionClass")}")
+            appendLine("exceptionMessage=${value("exceptionMessage")}")
+            appendLine("rootCause=${value("rootCause")}")
+            append("=== End ===")
+        }
+    }
+
+    /** Human-readable distribution of the latest 50 unique failed requests. */
+    fun failureStatisticsText(source: List<AiHttpDiagEntry> = snapshot()): String {
+        val seenRequestIds = HashSet<String>()
+        val failures = source.asReversed().mapNotNull { terminal ->
+            val requestId = terminal.requestId
+            if (terminal.event !in FAILURE_EVENTS || requestId.isNullOrBlank() || !seenRequestIds.add(requestId)) {
+                return@mapNotNull null
+            }
+            val messages = source.asSequence()
+                .filter { it.requestId == requestId }
+                .map { it.message }
+                .toList()
+            fun field(name: String): String? = messages.asSequence()
+                .mapNotNull { fieldValue(it, name) }
+                .lastOrNull()
+            FailureRecord(
+                durationMs = field("durationMs")?.toLongOrNull() ?: return@mapNotNull null,
+                protocol = field("protocol") ?: "unknown",
+                networkMode = field("networkMode") ?: "unknown",
+                exceptionClass = field("exceptionClass") ?: "unknown",
+                eventCount = field("eventCount")?.toLongOrNull() ?: 0,
+                timeSinceLastEventMs = field("timeSinceLastEventMs")?.toLongOrNull(),
+            )
+        }.take(50)
+
+        if (failures.isEmpty()) return "失败统计\n暂无失败记录"
+        val sortedDurations = failures.map { it.durationMs }.sorted()
+        val medianMs = if (sortedDurations.size % 2 == 1) {
+            sortedDurations[sortedDurations.size / 2].toDouble()
+        } else {
+            val upper = sortedDurations.size / 2
+            (sortedDurations[upper - 1] + sortedDurations[upper]) / 2.0
+        }
+        val averageMs = failures.map { it.durationMs }.average()
+
+        return buildString {
+            appendLine("失败统计")
+            appendLine("最近失败次数：${failures.size}（最多 50 次）")
+            appendLine()
+            appendLine("平均失败时间：${formatSeconds(averageMs)}")
+            appendLine("中位数：${formatSeconds(medianMs)}")
+            appendLine()
+            appendLine("<30s：${failures.count { it.durationMs < 30_000 }} 次")
+            appendLine("30-40s：${failures.count { it.durationMs in 30_000 until 40_000 }} 次")
+            appendLine("40-60s：${failures.count { it.durationMs in 40_000 until 60_000 }} 次")
+            appendLine(">=60s：${failures.count { it.durationMs >= 60_000 }} 次")
+            appendLine()
+            append("最近一次：")
+            failures.first().let { latest ->
+                append("durationMs=${latest.durationMs}")
+                append(" protocol=${latest.protocol}")
+                append(" networkMode=${latest.networkMode}")
+                append(" exceptionClass=${latest.exceptionClass}")
+                append(" eventCount=${latest.eventCount}")
+                append(" timeSinceLastEventMs=${latest.timeSinceLastEventMs ?: "null"}")
+            }
+        }
+    }
+
     /** Compact, paste-friendly summary of the latest AI network experiment request. */
     fun latestNetworkExperimentText(
         appVersion: String,
@@ -187,7 +315,7 @@ object AiHttpDiagStore {
     }
 
     private fun fieldValue(message: String, name: String): String? =
-        Regex("(?:^|\\s)${Regex.escape(name)}=(.*?)(?=\\s[A-Za-z][A-Za-z0-9.]*=|$)")
+        Regex("(?:^|\\s)${Regex.escape(name)}=(.*?)(?=\\s[A-Za-z][A-Za-z0-9._-]*=|$)")
             .find(message)
             ?.groupValues
             ?.getOrNull(1)
@@ -201,6 +329,38 @@ object AiHttpDiagStore {
         "REMOTE_CONNECTION_FAILURE",
         "LOCAL_CALL_CANCEL",
     )
+    private val FAILURE_EVENTS = setOf("REQUEST_FAILED", "REMOTE_CONNECTION_FAILURE")
+    private val REQUEST_PROFILE_HEADERS = listOf(
+        "Content-Type",
+        "Accept",
+        "Accept-Encoding",
+        "User-Agent",
+        "Connection",
+        "Cache-Control",
+        "TE",
+    )
+    private val RESPONSE_PROFILE_HEADERS = listOf(
+        "Content-Type",
+        "Content-Encoding",
+        "Transfer-Encoding",
+        "Content-Length",
+        "Server",
+        "Via",
+        "CF-Ray",
+        "CF-Cache-Status",
+    )
+
+    private data class FailureRecord(
+        val durationMs: Long,
+        val protocol: String,
+        val networkMode: String,
+        val exceptionClass: String,
+        val eventCount: Long,
+        val timeSinceLastEventMs: Long?,
+    )
+
+    private fun formatSeconds(milliseconds: Double): String =
+        "${(milliseconds / 100.0).roundToLong() / 10.0}s"
 }
 
 /** Single logging gateway used by the network diagnostics instrumentation. */

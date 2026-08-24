@@ -16,6 +16,8 @@ import me.rerere.common.http.AcceptLanguageBuilder
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
 import me.rerere.rikkahub.data.ai.AiHttpClientFactory
+import me.rerere.rikkahub.data.ai.AiRequestProfileInterceptor
+import me.rerere.rikkahub.data.ai.MinimalOpenAiRequestInterceptor
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
 import me.rerere.rikkahub.data.ai.GenerationHandler
@@ -200,13 +202,17 @@ val dataSourceModule = module {
                     chain.proceed(request)
                 }
             }
+            .addNetworkInterceptor(AiRequestProfileInterceptor())
             .addNetworkInterceptor(RequestLoggingInterceptor())
+            .addInterceptor(MinimalOpenAiRequestInterceptor(get<SettingsStore>()))
             .addInterceptor(AIRequestInterceptor())
             .addInterceptor(HttpLoggingInterceptor().apply {
                 redactHeader("Authorization")
                 redactHeader("Proxy-Authorization")
                 redactHeader("x-api-key")
                 redactHeader("X-Goog-Api-Key")
+                redactHeader("Cookie")
+                redactHeader("Set-Cookie")
                 level = HttpLoggingInterceptor.Level.HEADERS
             })
             .build().also { SearchService.init(it, get()) }

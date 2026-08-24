@@ -21,7 +21,7 @@ android {
         minSdk = 26
         targetSdk = 37
         versionCode = 177
-        versionName = "2.4.10-network-debug3"
+        versionName = "2.4.10-network-debug4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

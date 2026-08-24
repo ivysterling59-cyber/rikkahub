@@ -3,7 +3,7 @@ name: Build Network Diagnostic APK
 on:
   push:
     branches:
-      - codex/network-debug
+      - codex/request-profile-debug
   workflow_dispatch:
 
 permissions:
@@ -60,60 +60,61 @@ jobs:
           ./gradlew :common:testDebugUnitTest --tests me.rerere.common.http.AiHttpDiagStoreTest --no-configuration-cache
           ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.data.ai.AiHttpDiagnosticsTest --no-configuration-cache
           ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.data.ai.AiHttpClientFactoryTest --no-configuration-cache
+          ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.data.ai.AiRequestProfileInterceptorTest --no-configuration-cache
 
       - name: Build signed universal release APK
         run: |
           ./gradlew assembleRelease
-          cp app/build/outputs/apk/release/app-universal-release.apk RikkaHub-network-debug3.apk
+          cp app/build/outputs/apk/release/app-universal-release.apk RikkaHub-network-debug4.apk
 
       - name: Verify release APK
         run: |
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
           AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)
-          "$APKSIGNER" verify --verbose --print-certs RikkaHub-network-debug3.apk
-          "$AAPT" dump badging RikkaHub-network-debug3.apk | grep "package: name='com.ivysterling59cyber.rikkahub'"
-          "$AAPT" dump badging RikkaHub-network-debug3.apk | grep "versionName='2.4.10-network-debug3'"
-          sha256sum RikkaHub-network-debug3.apk > RikkaHub-network-debug3.apk.sha256
+          "$APKSIGNER" verify --verbose --print-certs RikkaHub-network-debug4.apk
+          "$AAPT" dump badging RikkaHub-network-debug4.apk | grep "package: name='com.ivysterling59cyber.rikkahub'"
+          "$AAPT" dump badging RikkaHub-network-debug4.apk | grep "versionName='2.4.10-network-debug4'"
+          sha256sum RikkaHub-network-debug4.apk > RikkaHub-network-debug4.apk.sha256
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RikkaHub-network-debug3
+          name: RikkaHub-network-debug4
           path: |
-            RikkaHub-network-debug3.apk
-            RikkaHub-network-debug3.apk.sha256
+            RikkaHub-network-debug4.apk
+            RikkaHub-network-debug4.apk.sha256
           if-no-files-found: error
 
       - name: Publish network experiment prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="2.4.10-network-debug3"
+          TAG="network-debug-v2.4.10-4"
           NOTES=$(cat <<'EOF'
           更新内容:
 
-          - 新增默认、仅 HTTP/1.1、新连接三种 AI 网络实验模式。
-          - OpenAI、OpenAI Compatible、DeepSeek、Claude、Gemini 均已接入。
-          - 新连接模式为每次 AI 请求创建独立客户端和 ConnectionPool。
-          - 日志新增实际协议、模式、客户端、连接池及连接复用信息。
-          - 新增当前模式显示和“复制当前网络实验信息”；未修改超时、重试和请求生命周期。
+          - 新增安全请求/响应 Profile：记录请求结构、实际网络层请求头、响应头与 CDN/代理特征，不记录正文或凭据。
+          - 新增正常与“最小 OpenAI Compatible”请求模式；最小模式保留 model、完整 messages 与 stream=true，只移除可选顶层字段。
+          - 新增 SSE 事件计数、首/后续事件时间、距最后事件时间，以及最近 50 次失败的时间桶统计。
+          - 新增“复制最近失败 Profile”，便于直接比较手机与其他客户端的请求指纹。
+          - 保留既有 HTTP 协议实验、超时、重试、代理及请求生命周期语义。
 
           Updates:
 
-          - Added Default, HTTP/1.1-only, and Fresh Connection AI experiment modes.
-          - Applied all modes to OpenAI, compatible APIs, DeepSeek, Claude, and Gemini.
-          - Fresh Connection mode creates an independent client and connection pool per AI request.
-          - Added runtime protocol, mode, client, pool, and connection-reuse diagnostics.
-          - Added current-mode display and experiment-summary copying without timeout, retry, or lifecycle changes.
+          - Added safe request/response profiles for request structure, actual network headers, response headers, and CDN/proxy fingerprints without bodies or credentials.
+          - Added Normal and Minimal OpenAI Compatible request modes; minimal mode keeps model, complete messages, and stream=true while removing optional top-level fields.
+          - Added SSE event timing plus time-bucket statistics for the latest 50 failures.
+          - Added one-tap copying of the latest failed request profile for cross-client comparison.
+          - Preserved existing protocol experiments, timeouts, retries, proxy behavior, and request lifecycle semantics.
           EOF
           )
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" RikkaHub-network-debug3.apk RikkaHub-network-debug3.apk.sha256 --clobber
+            gh release upload "$TAG" RikkaHub-network-debug4.apk RikkaHub-network-debug4.apk.sha256 --clobber
             gh release edit "$TAG" --title "$TAG" --notes "$NOTES" --prerelease
           else
             gh release create "$TAG" \
-              RikkaHub-network-debug3.apk \
-              RikkaHub-network-debug3.apk.sha256 \
+              RikkaHub-network-debug4.apk \
+              RikkaHub-network-debug4.apk.sha256 \
               --target "$GITHUB_SHA" \
               --title "$TAG" \
               --notes "$NOTES" \
