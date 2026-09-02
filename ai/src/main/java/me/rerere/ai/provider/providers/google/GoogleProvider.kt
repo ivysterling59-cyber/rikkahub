@@ -54,6 +54,8 @@ import me.rerere.ai.ui.metadataAs
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.AiStreamCancellationDiagnostics
+import me.rerere.ai.util.AiSseListener
+import me.rerere.ai.util.AiSseReader
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
@@ -72,9 +74,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import okhttp3.sse.EventSource
-import okhttp3.sse.EventSourceListener
-import okhttp3.sse.EventSources
 import org.apache.commons.text.StringEscapeUtils
 import kotlin.time.Clock
 import kotlin.uuid.Uuid
@@ -246,8 +245,12 @@ class GoogleProvider(
                 .build()
         )
 
+        val streamReaderMode = clientProvider.streamReaderMode()
+        val requestTrace = requireNotNull(request.aiRequestTrace()).apply {
+            markStreamReader(streamReaderMode.name)
+        }
         val cancellationDiagnostics = AiStreamCancellationDiagnostics(
-            trace = requireNotNull(request.aiRequestTrace()),
+            trace = requestTrace,
             flowJob = coroutineContext[kotlinx.coroutines.Job],
         )
         val responseId = Uuid.random().toString()
@@ -261,9 +264,8 @@ class GoogleProvider(
             }
         }
 
-        val listener = object : EventSourceListener() {
+        val listener = object : AiSseListener {
             override fun onEvent(
-                eventSource: EventSource,
                 id: String?,
                 type: String?,
                 data: String
@@ -284,7 +286,6 @@ class GoogleProvider(
             }
 
             override fun onFailure(
-                eventSource: EventSource,
                 t: Throwable?,
                 response: Response?
             ) {
@@ -315,19 +316,23 @@ class GoogleProvider(
                 }
             }
 
-            override fun onClosed(eventSource: EventSource) {
+            override fun onClosed() {
                 cancellationDiagnostics.mark("transport_closed")
                 sendChunks(decoder.onClosed())
                 close()
             }
         }
 
-        val eventSource = EventSources.createFactory(client)
-                .newEventSource(request, listener)
+        val streamConnection = AiSseReader.open(
+            callFactory = client,
+            mode = streamReaderMode,
+            request = request,
+            listener = listener,
+        )
 
         awaitClose {
             cancellationDiagnostics.logCleanup()
-            eventSource.cancel()
+            streamConnection.cancel()
         }
         // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
     }.buffer(Channel.UNLIMITED)

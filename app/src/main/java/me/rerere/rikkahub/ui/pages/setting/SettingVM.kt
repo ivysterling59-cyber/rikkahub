@@ -10,6 +10,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.ai.AiNetworkMode
 import me.rerere.rikkahub.data.ai.AiRequestMode
+import me.rerere.ai.provider.AiStreamReaderMode
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 
 class SettingVM(
@@ -32,5 +33,9 @@ class SettingVM(
 
     fun updateAiRequestMode(mode: AiRequestMode) {
         settingsStore.updateAiRequestMode(mode)
+    }
+
+    fun updateAiStreamReaderMode(mode: AiStreamReaderMode) {
+        settingsStore.updateAiStreamReaderMode(mode)
     }
 }

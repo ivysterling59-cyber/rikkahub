@@ -49,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.common.http.AiHttpDiagEntry
 import me.rerere.common.http.AiHttpDiagStore
+import me.rerere.ai.provider.AiStreamReaderMode
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AiNetworkMode
 import me.rerere.rikkahub.data.ai.AiRequestMode
@@ -97,6 +98,7 @@ fun NetworkDiagnosticLogPage(vm: SettingVM = koinViewModel()) {
         }
     }
     val failureStatistics = remember(entries) { AiHttpDiagStore.failureStatisticsText(entries) }
+    val thirtySecondPattern = remember(entries) { AiHttpDiagStore.thirtySecondPatternText(entries) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/plain"),
@@ -136,11 +138,15 @@ fun NetworkDiagnosticLogPage(vm: SettingVM = koinViewModel()) {
                     lastUpdatedAt = entries.lastOrNull()?.timestamp,
                     networkMode = settings.aiNetworkMode,
                     requestMode = settings.aiRequestMode,
+                    streamReaderMode = settings.aiStreamReaderMode,
                     onNetworkModeChange = { mode ->
                         if (!settings.init) vm.updateAiNetworkMode(mode)
                     },
                     onRequestModeChange = { mode ->
                         if (!settings.init) vm.updateAiRequestMode(mode)
+                    },
+                    onStreamReaderModeChange = { mode ->
+                        if (!settings.init) vm.updateAiStreamReaderMode(mode)
                     },
                     onCopyLatestFailure = {
                         val text = AiHttpDiagStore.latestFailedRequestText()
@@ -196,6 +202,19 @@ fun NetworkDiagnosticLogPage(vm: SettingVM = koinViewModel()) {
                     SelectionContainer {
                         Text(
                             text = failureStatistics,
+                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = JetbrainsMono,
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+                    SelectionContainer {
+                        Text(
+                            text = thirtySecondPattern,
                             modifier = Modifier.fillMaxWidth().padding(14.dp),
                             style = MaterialTheme.typography.bodySmall,
                             fontFamily = JetbrainsMono,
@@ -269,8 +288,10 @@ private fun DiagnosticSummaryCard(
     lastUpdatedAt: Long?,
     networkMode: AiNetworkMode,
     requestMode: AiRequestMode,
+    streamReaderMode: AiStreamReaderMode,
     onNetworkModeChange: (AiNetworkMode) -> Unit,
     onRequestModeChange: (AiRequestMode) -> Unit,
+    onStreamReaderModeChange: (AiStreamReaderMode) -> Unit,
     onCopyLatestFailure: () -> Unit,
     onCopyLatestFailureProfile: () -> Unit,
     onCopyExperiment: () -> Unit,
@@ -316,6 +337,21 @@ private fun DiagnosticSummaryCard(
             }
             Text(
                 "最小模式仅改写流式 OpenAI Chat Completions；保留 model、messages、stream，默认仍为正常模式。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text("流式读取模式：${streamReaderMode.displayName}", style = MaterialTheme.typography.bodyMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AiStreamReaderMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = streamReaderMode == mode,
+                        onClick = { onStreamReaderModeChange(mode) },
+                        label = { Text(mode.displayName) },
+                    )
+                }
+            }
+            Text(
+                "仅影响 network-debug 版的流式 AI 请求；非流式请求与所有 timeout 均保持不变。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

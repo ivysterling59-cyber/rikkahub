@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai
 
+import me.rerere.ai.provider.AiStreamReaderMode
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import org.junit.Assert.assertEquals
@@ -71,6 +72,22 @@ class AiHttpClientFactoryTest {
         assertEquals(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1), freshClient.protocols)
         assertNotSame(defaultClient, http1Client)
         assertNotSame(http1Client, freshClient)
+    }
+
+    @Test
+    fun `stream reader mode is selected independently of network mode`() {
+        var readerMode = AiStreamReaderMode.EVENT_SOURCE
+        val readerFactory = AiHttpClientFactory(
+            baseClient = baseClient,
+            modeProvider = { mode },
+            logConfiguration = false,
+            streamReaderModeProvider = { readerMode },
+        )
+
+        assertEquals(AiStreamReaderMode.EVENT_SOURCE, readerFactory.streamReaderMode())
+        readerMode = AiStreamReaderMode.MANUAL_SSE
+        assertEquals(AiStreamReaderMode.MANUAL_SSE, readerFactory.streamReaderMode())
+        assertEquals(baseClient.protocols, readerFactory.clientForRequest().protocols)
     }
 
     private fun assertTimeoutsUnchanged(client: OkHttpClient) {

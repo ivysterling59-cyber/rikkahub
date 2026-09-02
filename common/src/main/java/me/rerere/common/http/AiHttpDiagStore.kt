@@ -146,9 +146,15 @@ object AiHttpDiagStore {
             appendLine("requestMode=${value("requestMode")}")
             appendLine("protocol=${value("protocol")}")
             appendLine("stream=${value("stream")}")
+            appendLine("streamReader=${value("streamReader")}")
             appendLine()
             appendLine("durationMs=${value("durationMs")}")
             appendLine("eventCount=${value("eventCount")}")
+            appendLine("headersReceivedElapsedMs=${value("headersReceivedElapsedMs")}")
+            appendLine("firstBodyByteElapsedMs=${value("firstBodyByteElapsedMs")}")
+            appendLine("firstSseEventElapsedMs=${value("firstSseEventElapsedMs")}")
+            appendLine("lastDataElapsedMs=${value("lastDataElapsedMs")}")
+            appendLine("timeSinceLastDataMs=${value("timeSinceLastDataMs")}")
             appendLine("lastEventElapsedMs=${value("lastEventElapsedMs")}")
             appendLine("timeSinceLastEventMs=${value("timeSinceLastEventMs")}")
             appendLine()
@@ -177,28 +183,7 @@ object AiHttpDiagStore {
 
     /** Human-readable distribution of the latest 50 unique failed requests. */
     fun failureStatisticsText(source: List<AiHttpDiagEntry> = snapshot()): String {
-        val seenRequestIds = HashSet<String>()
-        val failures = source.asReversed().mapNotNull { terminal ->
-            val requestId = terminal.requestId
-            if (terminal.event !in FAILURE_EVENTS || requestId.isNullOrBlank() || !seenRequestIds.add(requestId)) {
-                return@mapNotNull null
-            }
-            val messages = source.asSequence()
-                .filter { it.requestId == requestId }
-                .map { it.message }
-                .toList()
-            fun field(name: String): String? = messages.asSequence()
-                .mapNotNull { fieldValue(it, name) }
-                .lastOrNull()
-            FailureRecord(
-                durationMs = field("durationMs")?.toLongOrNull() ?: return@mapNotNull null,
-                protocol = field("protocol") ?: "unknown",
-                networkMode = field("networkMode") ?: "unknown",
-                exceptionClass = field("exceptionClass") ?: "unknown",
-                eventCount = field("eventCount")?.toLongOrNull() ?: 0,
-                timeSinceLastEventMs = field("timeSinceLastEventMs")?.toLongOrNull(),
-            )
-        }.take(50)
+        val failures = failureRecords(source, limit = 50)
 
         if (failures.isEmpty()) return "失败统计\n暂无失败记录"
         val sortedDurations = failures.map { it.durationMs }.sorted()
@@ -229,8 +214,38 @@ object AiHttpDiagStore {
                 append(" networkMode=${latest.networkMode}")
                 append(" exceptionClass=${latest.exceptionClass}")
                 append(" eventCount=${latest.eventCount}")
+                append(" timeSinceLastDataMs=${latest.timeSinceLastDataMs ?: "null"}")
                 append(" timeSinceLastEventMs=${latest.timeSinceLastEventMs ?: "null"}")
             }
+        }
+    }
+
+    /** Focused view for the repeatedly observed 30-40 second failure cluster. */
+    fun thirtySecondPatternText(source: List<AiHttpDiagEntry> = snapshot()): String {
+        val failures = failureRecords(source, limit = 20)
+        if (failures.isEmpty()) return "30秒模式分析\n暂无失败记录"
+        val sorted = failures.map { it.durationMs }.sorted()
+        val medianMs = if (sorted.size % 2 == 1) {
+            sorted[sorted.size / 2].toDouble()
+        } else {
+            val upper = sorted.size / 2
+            (sorted[upper - 1] + sorted[upper]) / 2.0
+        }
+
+        return buildString {
+            appendLine("30秒模式分析")
+            appendLine("最近失败时长（最多 20 次，最新在前）：")
+            failures.forEach { appendLine(formatSeconds(it.durationMs.toDouble())) }
+            appendLine()
+            appendLine("平均：${formatSeconds(failures.map { it.durationMs }.average())}")
+            appendLine("中位数：${formatSeconds(medianMs)}")
+            appendLine("最小：${formatSeconds(sorted.first().toDouble())}")
+            appendLine("最大：${formatSeconds(sorted.last().toDouble())}")
+            appendLine()
+            appendLine("30-33s：${failures.count { it.durationMs in 30_000 until 33_000 }} 次")
+            appendLine("33-36s：${failures.count { it.durationMs in 33_000 until 36_000 }} 次")
+            appendLine("36-40s：${failures.count { it.durationMs in 36_000 until 40_000 }} 次")
+            append("40s+：${failures.count { it.durationMs >= 40_000 }} 次")
         }
     }
 
@@ -273,9 +288,15 @@ object AiHttpDiagStore {
             appendLine("provider=$provider")
             appendLine("host=$host")
             appendLine("stream=${field("stream") ?: "unknown"}")
+            appendLine("streamReader=${field("streamReader") ?: "unknown"}")
             appendLine("protocol=${field("protocol") ?: "unknown"}")
             appendLine("statusCode=${field("statusCode") ?: "unknown"}")
             appendLine("durationMs=${field("durationMs") ?: "unknown"}")
+            appendLine("headersReceivedElapsedMs=${field("headersReceivedElapsedMs") ?: "unknown"}")
+            appendLine("firstBodyByteElapsedMs=${field("firstBodyByteElapsedMs") ?: "unknown"}")
+            appendLine("firstSseEventElapsedMs=${field("firstSseEventElapsedMs") ?: "unknown"}")
+            appendLine("lastDataElapsedMs=${field("lastDataElapsedMs") ?: "unknown"}")
+            appendLine("timeSinceLastDataMs=${field("timeSinceLastDataMs") ?: "unknown"}")
             appendLine("normalEof=${field("normalEof") ?: "unknown"}")
             appendLine("callCancelled=${field("callCancelled") ?: "unknown"}")
             appendLine("exceptionClass=${field("exceptionClass") ?: "none"}")
@@ -356,8 +377,35 @@ object AiHttpDiagStore {
         val networkMode: String,
         val exceptionClass: String,
         val eventCount: Long,
+        val timeSinceLastDataMs: Long?,
         val timeSinceLastEventMs: Long?,
     )
+
+    private fun failureRecords(source: List<AiHttpDiagEntry>, limit: Int): List<FailureRecord> {
+        val seenRequestIds = HashSet<String>()
+        return source.asReversed().mapNotNull { terminal ->
+            val requestId = terminal.requestId
+            if (terminal.event !in FAILURE_EVENTS || requestId.isNullOrBlank() || !seenRequestIds.add(requestId)) {
+                return@mapNotNull null
+            }
+            val messages = source.asSequence()
+                .filter { it.requestId == requestId }
+                .map { it.message }
+                .toList()
+            fun field(name: String): String? = messages.asSequence()
+                .mapNotNull { fieldValue(it, name) }
+                .lastOrNull()
+            FailureRecord(
+                durationMs = field("durationMs")?.toLongOrNull() ?: return@mapNotNull null,
+                protocol = field("protocol") ?: "unknown",
+                networkMode = field("networkMode") ?: "unknown",
+                exceptionClass = field("exceptionClass") ?: "unknown",
+                eventCount = field("eventCount")?.toLongOrNull() ?: 0,
+                timeSinceLastDataMs = field("timeSinceLastDataMs")?.toLongOrNull(),
+                timeSinceLastEventMs = field("timeSinceLastEventMs")?.toLongOrNull(),
+            )
+        }.take(limit)
+    }
 
     private fun formatSeconds(milliseconds: Double): String =
         "${(milliseconds / 100.0).roundToLong() / 10.0}s"

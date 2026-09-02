@@ -181,6 +181,27 @@ class AiHttpDiagStoreTest {
     }
 
     @Test
+    fun `thirty second pattern shows recent durations and requested buckets`() {
+        append("a", "REQUEST_FAILED", "durationMs=32630 protocol=h2 networkMode=DEFAULT exceptionClass=E1")
+        append("b", "REQUEST_FAILED", "durationMs=34140 protocol=h2 networkMode=DEFAULT exceptionClass=E2")
+        append("c", "REQUEST_FAILED", "durationMs=35510 protocol=http1 networkMode=HTTP1_ONLY exceptionClass=E3")
+        append("d", "REQUEST_FAILED", "durationMs=38000 protocol=h2 networkMode=DEFAULT exceptionClass=E4")
+        append("e", "REQUEST_FAILED", "durationMs=41000 protocol=h2 networkMode=DEFAULT exceptionClass=E5")
+
+        val text = AiHttpDiagStore.thirtySecondPatternText()
+
+        assertTrue(text.contains("32.6s"))
+        assertTrue(text.contains("34.1s"))
+        assertTrue(text.contains("35.5s"))
+        assertTrue(text.contains("30-33s：1 次"))
+        assertTrue(text.contains("33-36s：2 次"))
+        assertTrue(text.contains("36-40s：1 次"))
+        assertTrue(text.contains("40s+：1 次"))
+        assertTrue(text.contains("最小：32.6s"))
+        assertTrue(text.contains("最大：41.0s"))
+    }
+
+    @Test
     fun `diagnostic messages redact URL queries and credential parameters`() {
         val message = "failed https://api.example.com/v1/chat?key=secret&mode=sse api_key=another-secret"
 

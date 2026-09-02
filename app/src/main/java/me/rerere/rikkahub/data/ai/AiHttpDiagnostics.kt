@@ -122,6 +122,7 @@ private class AiHttpEventListener(
     override fun responseHeadersEnd(call: Call, response: Response) {
         protocol = response.protocol
         statusCode = response.code
+        call.request().aiRequestTrace()?.markHeadersReceived()
         log(call, "HEADERS_RECEIVED")
     }
 
@@ -169,6 +170,7 @@ private class AiHttpEventListener(
         val message = buildString {
             append("pathType=").append(description.pathType)
             append(" stream=").append(trace?.streaming ?: description.streaming)
+            append(" streamReader=").append(trace?.streamReader() ?: if (description.streaming) "UNKNOWN" else "NON_STREAM")
             append(" networkMode=").append(identity.networkMode)
             append(" clientId=").append(identity.clientId)
             append(" connectionPoolId=").append(identity.connectionPoolId)
@@ -178,11 +180,14 @@ private class AiHttpEventListener(
             append(" statusCode=").append(statusCode ?: "none")
             append(" durationMs=").append(durationMs)
             append(" closeReason=").append(trace?.closeReason() ?: "not_traced")
-            if ((trace?.eventCount() ?: 0) > 0) {
-                append(" eventCount=").append(trace?.eventCount())
-                append(" lastEventElapsedMs=").append(trace?.lastEventElapsedMillis() ?: "none")
-                append(" timeSinceLastEventMs=").append(trace?.timeSinceLastEventMillis() ?: "none")
-            }
+            append(" eventCount=").append(trace?.eventCount() ?: 0)
+            append(" headersReceivedElapsedMs=").append(trace?.headersReceivedElapsedMillis() ?: "none")
+            append(" firstBodyByteElapsedMs=").append(trace?.firstBodyByteElapsedMillis() ?: "none")
+            append(" firstSseEventElapsedMs=").append(trace?.firstSseEventElapsedMillis() ?: "none")
+            append(" lastDataElapsedMs=").append(trace?.lastDataElapsedMillis() ?: "none")
+            append(" timeSinceLastDataMs=").append(trace?.timeSinceLastDataMillis() ?: "none")
+            append(" lastEventElapsedMs=").append(trace?.lastEventElapsedMillis() ?: "none")
+            append(" timeSinceLastEventMs=").append(trace?.timeSinceLastEventMillis() ?: "none")
             append(" thread=").append(Thread.currentThread().name)
             if (extra.isNotBlank()) append(' ').append(extra)
         }

@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.data.ai
 
 import me.rerere.ai.provider.AiHttpClientProvider
+import me.rerere.ai.provider.AiStreamReaderMode
+import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
@@ -12,11 +14,19 @@ class AiHttpClientFactory internal constructor(
     private val baseClient: OkHttpClient,
     private val modeProvider: () -> AiNetworkMode,
     private val logConfiguration: Boolean,
+    private val streamReaderModeProvider: () -> AiStreamReaderMode = { AiStreamReaderMode.EVENT_SOURCE },
 ) : AiHttpClientProvider {
     constructor(baseClient: OkHttpClient, settingsStore: SettingsStore) : this(
         baseClient = baseClient,
         modeProvider = { settingsStore.settingsFlow.value.aiNetworkMode },
         logConfiguration = true,
+        streamReaderModeProvider = {
+            if (BuildConfig.VERSION_NAME.contains("network-debug", ignoreCase = true)) {
+                settingsStore.settingsFlow.value.aiStreamReaderMode
+            } else {
+                AiStreamReaderMode.EVENT_SOURCE
+            }
+        },
     )
 
     private val clientSequence = AtomicLong(0)
@@ -54,6 +64,8 @@ class AiHttpClientFactory internal constructor(
             )
         }
     }
+
+    override fun streamReaderMode(): AiStreamReaderMode = streamReaderModeProvider()
 
     private fun buildClient(
         mode: AiNetworkMode,

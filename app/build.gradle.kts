@@ -20,8 +20,8 @@ android {
         applicationId = "com.ivysterling59cyber.rikkahub"
         minSdk = 26
         targetSdk = 37
-        versionCode = 177
-        versionName = "2.4.10-network-debug4"
+        versionCode = 178
+        versionName = "2.4.10-network-debug5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

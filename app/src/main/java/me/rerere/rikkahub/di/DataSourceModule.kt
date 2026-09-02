@@ -17,6 +17,7 @@ import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
 import me.rerere.rikkahub.data.ai.AiHttpClientFactory
 import me.rerere.rikkahub.data.ai.AiRequestProfileInterceptor
+import me.rerere.rikkahub.data.ai.AiResponseBodyTimingInterceptor
 import me.rerere.rikkahub.data.ai.MinimalOpenAiRequestInterceptor
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
@@ -203,6 +204,7 @@ val dataSourceModule = module {
                 }
             }
             .addNetworkInterceptor(AiRequestProfileInterceptor())
+            .addNetworkInterceptor(AiResponseBodyTimingInterceptor())
             .addNetworkInterceptor(RequestLoggingInterceptor())
             .addInterceptor(MinimalOpenAiRequestInterceptor(get<SettingsStore>()))
             .addInterceptor(AIRequestInterceptor())

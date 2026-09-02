@@ -12,7 +12,7 @@ class AiStreamCancellationDiagnostics(
     init {
         trace.log(
             event = "CALL_CREATE_REQUESTED",
-            extra = "source=EventSourceFactory jobActive=${flowJob?.isActive} " +
+            extra = "source=${trace.streamReader()} jobActive=${flowJob?.isActive} " +
                 "jobCancelled=${flowJob?.isCancelled}",
         )
         flowJob?.invokeOnCompletion { cause ->
@@ -66,7 +66,7 @@ class AiStreamCancellationDiagnostics(
             },
             extra = "source=awaitClose jobActive=${flowJob?.isActive} " +
                 "jobCancelled=${flowJob?.isCancelled} events=${trace.eventCount()} " +
-                "eventSourceCancelAboutToRun=true",
+                "streamConnectionCancelAboutToRun=true",
             error = cancellation,
         )
     }

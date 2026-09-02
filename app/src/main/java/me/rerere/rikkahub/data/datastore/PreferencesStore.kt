@@ -24,6 +24,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.AiStreamReaderMode
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.AiNetworkMode
 import me.rerere.rikkahub.data.ai.AiRequestMode
@@ -86,6 +87,7 @@ class SettingsStore(
         val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
         val AI_NETWORK_MODE = stringPreferencesKey("ai_network_mode")
         val AI_REQUEST_MODE = stringPreferencesKey("ai_request_mode")
+        val AI_STREAM_READER_MODE = stringPreferencesKey("ai_stream_reader_mode")
 
         // 模型选择
         val FAVORITE_MODELS = stringPreferencesKey("favorite_models")
@@ -209,6 +211,9 @@ class SettingsStore(
                 aiRequestMode = preferences[AI_REQUEST_MODE]
                     ?.let { value -> runCatching { AiRequestMode.valueOf(value) }.getOrNull() }
                     ?: AiRequestMode.NORMAL,
+                aiStreamReaderMode = preferences[AI_STREAM_READER_MODE]
+                    ?.let { value -> runCatching { AiStreamReaderMode.valueOf(value) }.getOrNull() }
+                    ?: AiStreamReaderMode.EVENT_SOURCE,
                 displaySetting = JsonInstant.decodeFromString(preferences[DISPLAY_SETTING] ?: "{}"),
                 searchServices = preferences[SEARCH_SERVICES]?.let {
                     JsonInstant.decodeFromString(it)
@@ -369,6 +374,7 @@ class SettingsStore(
             preferences[DEVELOPER_MODE] = settings.developerMode
             preferences[AI_NETWORK_MODE] = settings.aiNetworkMode.name
             preferences[AI_REQUEST_MODE] = settings.aiRequestMode.name
+            preferences[AI_STREAM_READER_MODE] = settings.aiStreamReaderMode.name
             preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
 
             preferences[FAVORITE_MODELS] = JsonInstant.encodeToString(settings.favoriteModels)
@@ -445,6 +451,16 @@ class SettingsStore(
         settingsFlow.value = current.copy(aiRequestMode = mode)
         scope.launch {
             dataStore.edit { preferences -> preferences[AI_REQUEST_MODE] = mode.name }
+        }
+    }
+
+    /** Makes the debug SSE reader A/B selection visible to the next streaming request. */
+    fun updateAiStreamReaderMode(mode: AiStreamReaderMode) {
+        val current = settingsFlow.value
+        if (current.init || current.aiStreamReaderMode == mode) return
+        settingsFlow.value = current.copy(aiStreamReaderMode = mode)
+        scope.launch {
+            dataStore.edit { preferences -> preferences[AI_STREAM_READER_MODE] = mode.name }
         }
     }
 
@@ -548,6 +564,7 @@ data class Settings(
     val developerMode: Boolean = false,
     val aiNetworkMode: AiNetworkMode = AiNetworkMode.DEFAULT,
     val aiRequestMode: AiRequestMode = AiRequestMode.NORMAL,
+    val aiStreamReaderMode: AiStreamReaderMode = AiStreamReaderMode.EVENT_SOURCE,
     val displaySetting: DisplaySetting = DisplaySetting(),
     val favoriteModels: List<Uuid> = emptyList(),
     val chatModelId: Uuid = Uuid.random(),
